@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>СтройДом — Частные дома от застройщика в Краснодаре</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Playfair Display', 'serif'],
+                    },
+                    colors: {
+                        primary: '#0F172A',
+                        accent: '#D4AF37',
+                        dark: '#020617',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #020617;
+            color: #fff;
+            overflow-x: hidden;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #D4AF37 0%, #FFE17B 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .glass {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .card-3d {
+            transform-style: preserve-3d;
+            transition: transform 0.6s cubic-bezier(0.23, 1, 0.32, 1);
+        }
+        .card-3d:hover {
+            transform: translateY(-10px) rotateX(5deg) rotateY(5deg);
+        }
+        .parallax-layer {
+            will-change: transform;
+        }
+        .glow {
+            box-shadow: 0 0 60px rgba(212, 175, 55, 0.3);
+        }
+        .menu-open {
+            overflow: hidden;
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #D4AF37;
+            box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-dark">
+    
+    <!-- Header -->
+    <header class="fixed w-full top-0 z-50 glass transition-all duration-300" id="header">
+        <nav class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <div class="w-10 h-10 bg-gradient-to-br from-accent to-yellow-600 rounded-lg flex items-center justify-center font-bold text-dark">СД</div>
+                    <span class="text-2xl font-display font-bold">СтройДом</span>
+                </div>
+                
+                <div class="hidden lg:flex items-center space-x-8">
+                    <a href="#catalog" class="text-gray-300 hover:text-accent transition-colors">Каталог домов</a>
+                    <a href="#about" class="text-gray-300 hover:text-accent transition-colors">О компании</a>
+                    <a href="#advantages" class="text-gray-300 hover:text-accent transition-colors">Преимущества</a>
+                    <a href="#process" class="text-gray-300 hover:text-accent transition-colors">Этапы</a>
+                    <a href="#faq" class="text-gray-300 hover:text-accent transition-colors">FAQ</a>
+                    <a href="#contact" class="text-gray-300 hover:text-accent transition-colors">Контакты</a>
+                </div>
+
+                <div class="hidden lg:flex items-center space-x-4">
+                    <a href="tel:+79206980858" class="text-accent font-semibold hover:text-yellow-500 transition-colors">+7 (920) 698-08-58</a>
+                    <a href="#contact" class="bg-accent text-dark px-6 py-3 rounded-lg font-semibold hover:bg-yellow-500 transition-all hover:shadow-lg hover:shadow-accent/50">Заказать звонок</a>
+                </div>
+
+                <button class="lg:hidden text-white" id="mobileMenuBtn">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-16 6h16"></path>
+                    </svg>
+                </button>
+            </div>
+        </nav>
+
+        <!-- Mobile Menu -->
+        <div class="hidden lg:hidden fixed inset-0 bg-dark/95 backdrop-blur-xl z-50" id="mobileMenu">
+            <div class="flex flex-col items-center justify-center h-full space-y-8">
+                <button class="absolute top-6 right-6 text-white" id="closeMobileMenu">
+                    <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                    </svg>
+                </button>
+                <a href="#catalog" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">Каталог домов</a>
+                <a href="#about" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">О компании</a>
+                <a href="#advantages" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">Преимущества</a>
+                <a href="#process" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">Этапы</a>
+                <a href="#faq" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">FAQ</a>
+                <a href="#contact" class="text-2xl text-gray-300 hover:text-accent transition-colors mobile-link">Контакты</a>
+                <a href="tel:+79206980858" class="text-2xl text-accent font-semibold">+7 (920) 698-08-58</a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative min-h-screen flex items-center justify-center overflow-hidden pt-20" id="hero">
+        <div class="absolute inset-0 z-0">
+            <div class="absolute inset-0 bg-gradient-to-b from-dark via-primary/50 to-dark z-10"></div>
+            <img src="https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?q=80&w=2400" alt="Luxury House" class="w-full h-full object-cover opacity-40 parallax-layer" data-speed="0.5">
+        </div>
+        
+        <div class="container mx-auto px-6 relative z-20">
+            <div class="max-w-5xl mx-auto text-center">
+                <div class="mb-6 opacity-0 hero-badge">
+                    <span class="inline-block px-6 py-2 bg-accent/20 border border-accent/50 rounded-full text-accent text-sm font-semibold">Премиум застройщик в Краснодаре</span>
+                </div>
+                <h1 class="text-5xl md:text-7xl lg:text-8xl font-display font-bold mb-6 opacity-0 hero-title leading-tight">
+                    Дом вашей мечты <br>
+                    <span class="gradient-text">в Краснодаре</span>
+                </h1>
+                <p class="text-xl md:text-2xl text-gray-300 mb-12 opacity-0 hero-subtitle max-w-3xl mx-auto">
+                    Строим частные дома премиум-класса с гарантией качества и современными технологиями
+                </p>
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-6 opacity-0 hero-cta">
+                    <a href="#catalog" class="bg-accent text-dark px-10 py-5 rounded-xl font-bold text-lg hover:bg-yellow-500 transition-all hover:shadow-2xl hover:shadow-accent/50 hover:scale-105 glow">
+                        Смотреть каталог
+                    </a>
+                    <a href="#contact" class="glass px-10 py-5 rounded-xl font-bold text-lg hover:bg-white/10 transition-all border border-white/20">
+                        Получить консультацию
+                    </a>
+                </div>
+
+                <div class="grid grid-cols-3 gap-8 mt-20 max-w-3xl mx-auto opacity-0 hero-stats">
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl font-bold gradient-text mb-2">12+</div>
+                        <div class="text-gray-400">лет на рынке</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl font-bold gradient-text mb-2">250+</div>
+                        <div class="text-gray-400">построенных домов</div>
+                    </div>
+                    <div class="text-center">
+                        <div class="text-4xl md:text-5xl font-bold gradient-text mb-2">98%</div>
+                        <div class="text-gray-400">довольных клиентов</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 animate-bounce">
+            <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 14l-7 7m0 0l-7-7m7 7V3"></path>
+            </svg>
+        </div>
+    </section>
+
+    <!-- Catalog Section -->
+    <section class="py-32 relative overflow-hidden" id="catalog">
+        <div class="absolute inset-0 opacity-5">
+            <div class="absolute inset-0" style="background-image: radial-gradient(circle at 2px 2px, rgba(212, 175, 55, 0.3) 1px, transparent 0); background-size: 40px 40px;"></div>
+        </div>
+        
+        <div class="container mx-auto px-6 relative z-10">
+            <div class="text-center mb-16 fade-up">
+                <span class="text-accent font-semibold text-sm uppercase tracking-wider">Наши проекты</span>
+                <h2 class="text-4xl md:text-6xl font-display font-bold mt-4 mb-6">Каталог домов</h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">Уникальные проекты домов для комфортной жизни вашей семьи</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- House Card 1 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1600585154340-be6161a56a0c?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 8.5 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Резиденция "Классик"</h3>
+                        <p class="text-gray-400 mb-4">Классический дом с современными удобствами</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">180 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">4</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">2</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+
+                <!-- House Card 2 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 12 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Вилла "Модерн"</h3>
+                        <p class="text-gray-400 mb-4">Стильный дом в стиле хай-тек</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">250 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">5</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">2</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+
+                <!-- House Card 3 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 6.8 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Коттедж "Уют"</h3>
+                        <p class="text-gray-400 mb-4">Компактный дом для небольшой семьи</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">120 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">3</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">1</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+
+                <!-- House Card 4 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1613490493576-7fde63acd811?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 15 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Особняк "Престиж"</h3>
+                        <p class="text-gray-400 mb-4">Роскошный дом премиум-класса</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">320 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">6</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">3</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+
+                <!-- House Card 5 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 9.5 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Дом "Семейный"</h3>
+                        <p class="text-gray-400 mb-4">Просторный дом для большой семьи</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">200 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">4</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">2</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+
+                <!-- House Card 6 -->
+                <div class="glass rounded-2xl overflow-hidden card-3d group cursor-pointer fade-up">
+                    <div class="relative overflow-hidden h-64">
+                        <img src="https://images.unsplash.com/photo-1605276374104-dee2a0ed3cd6?q=80&w=800" alt="House" class="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700">
+                        <div class="absolute top-4 right-4 bg-accent text-dark px-4 py-2 rounded-lg font-bold">от 11 млн ₽</div>
+                    </div>
+                    <div class="p-6">
+                        <h3 class="text-2xl font-bold mb-2">Усадьба "Европа"</h3>
+                        <p class="text-gray-400 mb-4">Европейский стиль и комфорт</p>
+                        <div class="grid grid-cols-3 gap-4 mb-6 text-sm">
+                            <div>
+                                <div class="text-gray-500">Площадь</div>
+                                <div class="font-semibold">230 м²</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Спальни</div>
+                                <div class="font-semibold">5</div>
+                            </div>
+                            <div>
+                                <div class="text-gray-500">Этажей</div>
+                                <div class="font-semibold">2</div>
+                            </div>
+                        </div>
+                        <a href="#contact" class="w-full bg-accent/10 border border-accent text-accent py-3 rounded-lg font-semibold hover:bg-accent hover:text-dark transition-all block text-center">
+                            Получить смету
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="py-32 relative overflow-hidden" id="about">
+        <div class="absolute top-1/2 left-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+        <div class="absolute bottom-0 right-0 w-96 h-96 bg-accent/5 rounded-full blur-3xl"></div>
+        
+        <div class="container mx-auto px-6 relative z-10">
+            <div class="grid lg:grid-cols-2 gap-16 items-center">
+                <div class="fade-up">
+                    <span class="text-accent font-semibold text-sm uppercase tracking-wider">О компании</span>
+                    <h2 class="text-4xl md:text-6xl font-display font-bold mt-4 mb-6">СтройДом — ваш надежный партнер</h2>
+                    <p class="text-xl text-gray-400 mb-8">
+                        Мы строим дома в Краснодаре уже более 12 лет. За это время реализовали более 250 проектов и заслужили доверие сотен семей.
+                    </p>
+                    <p class="text-lg text-gray-400 mb-8">
+                        Наша миссия — создавать не просто дома, а пространства для счастливой жизни. Мы используем только качественные материалы, современные технологии и работаем с лучшими специалистами.
+                    </p>
+                    
+                    <div class="space-y-4">
+                        <div class="flex items-start space-x-4">
+                            <div class="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">Гарантия качества</h4>
+                                <p class="text-gray-400">Предоставляем 10 лет гарантии на все виды работ</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4">
+                            <div class="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">Строим в срок</h4>
+                                <p class="text-gray-400">Четкое соблюдение сроков строительства по договору</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex items-start space-x-4">
+                            <div class="w-12 h-12 bg-accent/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <svg class="w-6 h-6 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                                </svg>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-lg mb-1">Прозрачное ценообразование</h4>
+                                <p class="text-gray-400">Фиксированная стоимость без скрытых платежей</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="relative fade-up">
+                    <div class="relative z-10">
+                        <img src="https://images.unsplash.com/photo-1600585154526-990dced4db0d?q=80&w=800" alt="Modern House" class="rounded-2xl shadow-2xl float-animation">
+                    </div>
+                    <div class="absolute -bottom-10 -right-10 w-64 h-64 bg-accent/20 rounded-full blur-3xl"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Advantages Section -->
+    <section class="py-32 relative" id="advantages">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16 fade-up">
+                <span class="text-accent font-semibold text-sm uppercase tracking-wider">Почему мы</span>
+                <h2 class="text-4xl md:text-6xl font-display font-bold mt-4 mb-6">Наши преимущества</h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">Что делает нас лучшим выбором для строительства вашего дома</p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <div class="glass p-8 rounded-2xl card-3d fade-up">
+                    <div class="w-16 h-16 bg-accent/20 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Лицензии и сертификаты</h3>
+                    <p class="text-gray-400">Все необходимые разрешения и документация для законного строительства</p>
+                </div>
+
+                <div class="glass p-8 rounded-2xl card-3d fade-up">
+                    <div class="w-16 h-16 bg-accent/20 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Собственное производство</h3>
+                    <p class="text-gray-400">Контроль качества на всех этапах благодаря собственной производственной базе</p>
+                </div>
+
+                <div class="glass p-8 rounded-2xl card-3d fade-up">
+                    <div class="w-16 h-16 bg-accent/20 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Опытная команда</h3>
+                    <p class="text-gray-400">Более 50 профессионалов с опытом работы от 10 лет</p>
+                </div>
+
+                <div class="glass p-8 rounded-2xl card-3d fade-up">
+                    <div class="w-16 h-16 bg-accent/20 rounded-xl flex items-center justify-center mb-6">
+                        <svg class="w-8 h-8 text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-2xl font-bold mb-4">Выгодные условия</h3>
+                    <p class="text-gray-400">Гибкая система оплаты, рассрочка и ипотечные программы</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Process Section -->
+    <section class="py-32 relative overflow-hidden" id="process">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16 fade-up">
+                <span class="text-accent font-semibold text-sm uppercase tracking-wider">Как мы работаем</span>
+                <h2 class="text-4xl md:text-6xl font-display font-bold mt-4 mb-6">Этапы строительства</h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">Прозрачный процесс от первого звонка до получения ключей</p>
+            </div>
+
+            <div class="max-w-5xl mx-auto">
+                <div class="space-y-8">
+                    <!-- Step 1 -->
+                    <div class="glass p-8 rounded-2xl fade-up relative overflow-hidden group hover:border-accent/50 transition-all duration-500">
+                        <div class="flex items-start space-x-6 relative z-10">
+                            <div class="w-16 h-16 bg-gradient-to-br from-accent to-yellow-600 rounded-xl flex items-center justify-center flex-shrink-0 text-dark font-bold text-2xl">01</div>
+                            <div class="flex-1">
+                                <h3 class="text-2xl font-bold mb-3">Консультация и выбор проекта</h3>
+                                <p class="text-gray-400 text-lg">Знакомимся, обсуждаем ваши пожелания, показываем готовые проекты или разрабатываем индивидуальный. Выезжаем на участок для оценки.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 2 -->
+                    <div class="glass p-8 rounded-2xl fade-up relative overflow-hidden group hover:border-accent/50 transition-all duration-500">
+                        <div class="flex items-start space-x-6 relative z-10">
+                            <div class="w-16 h-16 bg-gradient-to-br from-accent to-yellow-600 rounded-xl flex items-center justify-center flex-shrink-0 text-dark font-bold text-2xl">02</div>
+                            <div class="flex-1">
+                                <h3 class="text-2xl font-bold mb-3">Проектирование и смета</h3>
+                                <p class="text-gray-400 text-lg">Создаем детальный проект, согласовываем все нюансы. Составляем прозрачную смету с фиксированной стоимостью.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 3 -->
+                    <div class="glass p-8 rounded-2xl fade-up relative overflow-hidden group hover:border-accent/50 transition-all duration-500">
+                        <div class="flex items-start space-x-6 relative z-10">
+                            <div class="w-16 h-16 bg-gradient-to-br from-accent to-yellow-600 rounded-xl flex items-center justify-center flex-shrink-0 text-dark font-bold text-2xl">03</div>
+                            <div class="flex-1">
+                                <h3 class="text-2xl font-bold mb-3">Заключение договора</h3>
+                                <p class="text-gray-400 text-lg">Подписываем официальный договор с четкими сроками, стоимостью и гарантийными обязательствами.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 4 -->
+                    <div class="glass p-8 rounded-2xl fade-up relative overflow-hidden group hover:border-accent/50 transition-all duration-500">
+                        <div class="flex items-start space-x-6 relative z-10">
+                            <div class="w-16 h-16 bg-gradient-to-br from-accent to-yellow-600 rounded-xl flex items-center justify-center flex-shrink-0 text-dark font-bold text-2xl">04</div>
+                            <div class="flex-1">
+                                <h3 class="text-2xl font-bold mb-3">Строительство и коммуникации</h3>
+                                <p class="text-gray-400 text-lg">Возводим фундамент, стены, кровлю, монтируем все инженерные сети под ключ с фото-отчетами.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- Step 5 -->
+                    <div class="glass p-8 rounded-2xl fade-up relative overflow-hidden group hover:border-accent/50 transition-all duration-500">
+                        <div class="flex items-start space-x-6 relative z-10">
+                            <div class="w-16 h-16 bg-gradient-to-br from-accent to-yellow-600 rounded-xl flex items-center justify-center flex-shrink-0 text-dark font-bold text-2xl">05</div>
+                            <div class="flex-1">
+                                <h3 class="text-2xl font-bold mb-3">Сдача объекта и ключи</h3>
+                                <p class="text-gray-400 text-lg">Финальный клининг, проверка инженерных систем, подписание акта приемки и вручение ключей от вашего нового дома.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="py-32 relative overflow-hidden" id="testimonials">
+        <div class="container mx-auto px-6">
+            <div class="text-center mb-16 fade-up">
+                <span class="text-accent font-semibold text-sm uppercase tracking-wider">Отзывы</span>
+                <h2 class="text-4xl md:text-6xl font-display font-bold mt-4 mb-6">Что говорят наши клиенты</h2>
+                <p class="text-xl text-gray-400 max-w-2xl mx-auto">Более 250 довольных семей уже живут в домах от СтройДом</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-8">
+                <!-- Review 1 -->
+                <div class="glass p-8 rounded-2xl fade-up card-3d">
+                    <div class="flex items-center space-x-1 mb-4 text-accent">★★★★★</div>
+                    <p class="text-gray-300 mb-6 text-lg">"Построили дом мечты! Все сделано качественно, в срок, без лишних доплат. Команда профессионалов своего дела. Рекомендую!"</p>
+                    <div class="flex items-center space-x-4">
+                        <img src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop" class="w-12 h-12 rounded-full object-cover border border-accent/40" alt="Клиент">
+                        <div>
+                            <div class="font-bold">Алексей Смирнов</div>
+                            <div class="text-sm text-gray-400">КП "Близкий", 210 м²</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review 2 -->
+                <div class="glass p-8 rounded-2xl fade-up card-3d">
+                    <div class="flex items-center space-x-1 mb-4 text-accent">★★★★★</div>
+                    <p class="text-gray-300 mb-6 text-lg">"Очень переживали за сроки, так как продали квартиру. Но ребята сдали дом даже на 2 недели раньше срока. Спасибо за честность!"</p>
+                    <div class="flex items-center space-x-4">
+                        <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop" class="w-12 h-12 rounded-full object-cover border border-accent/40" alt="Клиент">
+                        <div>
+                            <div class="font-bold">Елена и Денис</div>
+                            <div class="text-sm text-gray-400">п. Знаменский, 160 м²</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Review 3 -->
+                <div class="glass p-8 rounded-2xl fade-up card-3d">
+                    <div class="flex items-center space-x-1 mb-4 text-accent">★★★★★</div>
+                    <p class="text-gray-300 mb-6 text-lg">"Отдельное спасибо архитектору за индивидуальный проект виллы. Продумана каждая розетка и панорамный вид из гостиной!"</p>
+                    <div class="flex items-center space-x-4">
+                        <img src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=100&h=100&fit=crop" class="w-12 h-12 rounded-full object-cover border border-accent/40" alt="Клиент">
+                        <div>
+                            <div class="font-bold">Михаил Романов</div>
+                            <div class="text-sm text-gray-400">Немецкая Деревня, 280 м²</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="py-32 relative" id="faq">
+        <div class="container mx-auto px-6 max-w-4xl">
+            <div class="text-center mb-16 fade-up">
+                <span class="text-accent font-semibold text-sm uppercase tracking-wider">Частые вопросы</span>
+                <h2 class="text-4xl md:text-5xl font-display font-bold mt-4 mb-6">Ответы на популярные вопросы</h2>
+            </div>
+
+            <div class="space-y-4">
+                <details class="glass p-6 rounded-2xl cursor-pointer group">
+                    <summary class="font-bold text-lg flex items-center justify-between text-white group-hover:text-accent transition">
+                        <span>Сколько времени занимает строительство дома под ключ?</span>
+                        <span class="text-accent text-2xl font-light">+</span>
+                    </summary>
+                    <p class="text-gray-400 mt-4 leading-relaxed">В среднем строительство дома площадью 150-250 м² занимает от 4 до 7 месяцев в зависимости от сложности проекта, типа фундамента и выбранных материалов отделки.</p>
+                </details>
+
+                <details class="glass p-6 rounded-2xl cursor-pointer group">
+                    <summary class="font-bold text-lg flex items-center justify-between text-white group-hover:text-accent transition">
+                        <span>Работаете ли вы с льготной и семейной ипотекой?</span>
+                        <span class="text-accent text-2xl font-light">+</span>
+                    </summary>
+                    <p class="text-gray-400 mt-4 leading-relaxed">Да, мы аккредитованы во всех ведущих банках (Сбербанк, ВТБ, ДОМ.РФ, Альфа-Банк). Помогаем с одобрением семейной, IT и льготной ипотеки на строительство от 6%.</p>
+                </details>
+
+                <details class="glass p-6 rounded-2xl cursor-pointer group">
+                    <summary class="font-bold text-lg flex items-center justify-between text-white group-hover:text-accent transition">
+                        <span>Фиксируется ли стоимость в договоре?</span>
+                        <span class="text-accent text-2xl font-light">+</span>
+                    </summary>
+                    <p class="text-gray-400 mt-4 leading-relaxed">Да! Мы фиксируем общую стоимость и смету в договоре. Никаких непредвиденных доплат в процессе строительства не возникнет.</p>
+                </details>
+
+                <details class="glass p-6 rounded-2xl cursor-pointer group">
+                    <summary class="font-bold text-lg flex items-center justify-between text-white group-hover:text-accent transition">
+                        <span>Что входит в гарантию 10 лет?</span>
+                        <span class="text-accent text-2xl font-light">+</span>
+                    </summary>
+                    <p class="text-gray-400 mt-4 leading-relaxed">Гарантия распространяется на несущие конструкции, фундамент, кровлю и фасадные решения. В случае возникновения любых дефектов мы устраняем их за свой счет.</p>
+                </details>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section class="py-32 relative" id="contact">
+        <div class="container mx-auto px-6 relative z-10 max-w-5xl">
+            <div class="glass p-10 md:p-16 rounded-3xl border border-accent/30 relative overflow-hidden shadow-2xl">
+                <div class="grid md:grid-cols-2 gap-12 items-center">
+                    <div>
+                        <span class="text-accent font-semibold text-sm uppercase tracking-wider">Бесплатная консультация</span>
+                        <h2 class="text-3xl md:text-5xl font-display font-bold mt-2 mb-4">Начните путь к дому мечты</h2>
+                        <p class="text-gray-400 mb-8">Оставьте заявку — наш главный инженер свяжется с вами, ответит на вопросы и рассчитает предварительную смету.</p>
+                        
+                        <div class="space-y-4 text-gray-300">
+                            <div class="flex items-center space-x-3">
+                                <span class="text-accent">📞</span>
+                                <a href="tel:+79206980858" class="hover:text-accent font-semibold">+7 (920) 698-08-58</a>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-accent">📍</span>
+                                <span>г. Краснодар, ул. Красная, 180</span>
+                            </div>
+                            <div class="flex items-center space-x-3">
+                                <span class="text-accent">⏰</span>
+                                <span>Ежедневно с 09:00 до 20:00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <form onsubmit="event.preventDefault(); alert('Спасибо! Заявка принята, мы перезвоним вам в течение 10 минут.');" class="space-y-4">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Ваше имя</label>
+                            <input type="text" required placeholder="Константин" class="w-full bg-slate-900/80 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Телефон</label>
+                            <input type="tel" required placeholder="+7 (___) ___-__-__" class="w-full bg-slate-900/80 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Какой дом планируете?</label>
+                            <select class="w-full bg-slate-900/80 border border-white/10 rounded-xl px-4 py-3 text-white">
+                                <option>До 150 м² (от 6.8 млн ₽)</option>
+                                <option>150 – 250 м² (от 8.5 млн ₽)</option>
+                                <option>Более 250 м² (от 12 млн ₽)</option>
+                                <option>Индивидуальное проектирование</option>
+                            </select>
+                        </div>
+                        <button type="submit" class="w-full bg-accent text-dark font-bold py-4 rounded-xl hover:bg-yellow-500 transition-all shadow-lg shadow-accent/30 mt-4">
+                            Получить расчет стоимости →
+                        </button>
+                        <p class="text-[11px] text-gray-500 text-center">Нажимая кнопку, вы соглашаетесь на обработку персональных данных</p>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/10 py-12 text-gray-500 text-sm">
+        <div class="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-6">
+            <div class="flex items-center space-x-2">
+                <div class="w-8 h-8 bg-gradient-to-br from-accent to-yellow-600 rounded-lg flex items-center justify-center font-bold text-dark text-xs">СД</div>
+                <span class="text-lg font-display font-bold text-white">СтройДом</span>
+            </div>
+            <div>© 2026 Строительная компания «СтройДом». Все права защищены.</div>
+            <div class="flex space-x-6 text-gray-400">
+                <a href="#catalog" class="hover:text-accent">Каталог</a>
+                <a href="#about" class="hover:text-accent">О нас</a>
+                <a href="#contact" class="hover:text-accent">Контакты</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- GSAP Animations -->
+    <script>
+        gsap.registerPlugin(ScrollTrigger);
+
+        // Hero animations
+        gsap.to(".hero-badge", { opacity: 1, y: 0, duration: 0.8, delay: 0.2 });
+        gsap.to(".hero-title", { opacity: 1, y: 0, duration: 1, delay: 0.4 });
+        gsap.to(".hero-subtitle", { opacity: 1, y: 0, duration: 1, delay: 0.6 });
+        gsap.to(".hero-cta", { opacity: 1, y: 0, duration: 1, delay: 0.8 });
+        gsap.to(".hero-stats", { opacity: 1, y: 0, duration: 1, delay: 1 });
+
+        // Fade-up sections
+        gsap.utils.toArray('.fade-up').forEach(el => {
+            gsap.from(el, {
+                scrollTrigger: {
+                    trigger: el,
+                    start: "top 85%",
+                    toggleActions: "play none none none"
+                },
+                opacity: 0,
+                y: 40,
+                duration: 0.9,
+                ease: "power2.out"
+            });
+        });
+
+        // Mobile menu toggle
+        const menuBtn = document.getElementById('mobileMenuBtn');
+        const closeBtn = document.getElementById('closeMobileMenu');
+        const mobileMenu = document.getElementById('mobileMenu');
+        const mobileLinks = document.querySelectorAll('.mobile-link');
+
+        function toggleMenu() {
+            mobileMenu.classList.toggle('hidden');
+            document.body.classList.toggle('menu-open');
+        }
+
+        if(menuBtn) menuBtn.addEventListener('click', toggleMenu);
+        if(closeBtn) closeBtn.addEventListener('click', toggleMenu);
+        mobileLinks.forEach(link => link.addEventListener('click', toggleMenu));
+    </script>
+</body>
+</html>
