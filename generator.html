@@ -118,31 +118,28 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Сфера</label>
             <select id="businessType" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="">Выбери нишу</option>
-              <option value="IT / SaaS / Стартап">IT / SaaS / Стартап</option>
-              <option value="E-commerce / Магазин">E-commerce / Магазин</option>
-              <option value="Ресторан / Кафе">Ресторан / Кафе / Food</option>
-              <option value="Клиника / Медицина">Клиника / Медицина</option>
-              <option value="Фитнес / Спорт">Фитнес / Спорт</option>
-              <option value="Недвижимость">Недвижимость</option>
-              <option value="Образование / Курсы">Образование / Курсы</option>
-              <option value="Красота / Салон">Красота / Салон / Barbershop</option>
-              <option value="Авто / Детейлинг">Авто / Детейлинг / Сервис</option>
-              <option value="Юрист / Консалтинг">Юрист / Консалтинг</option>
-              <option value="Портфолио / Личный бренд">Портфолио / Личный бренд</option>
-              <option value="Креатив / Агентство">Креатив / Агентство / Дизайн</option>
+              <option value="">Выберите нишу вашего бизнеса</option>
+              <option value="Строительство домов, ремонт, недвижимость">🏗️ Строительство / Дома / Ремонт</option>
+              <option value="Недвижимость, аренда квартир, ЖК">🏢 Недвижимость / Аренда / ЖК</option>
+              <option value="Ресторан, кафе, доставка еды">🍕 Ресторан / Кафе / Доставка</option>
+              <option value="Автосервис, детейлинг, шиномонтаж">🚗 Автосервис / Детейлинг / Шины</option>
+              <option value="Салон красоты, барбершоп, SPA">💇 Салон красоты / Барбершоп / SPA</option>
+              <option value="Медицинская клиника, стоматология">🩺 Медицина / Клиника / Стоматология</option>
+              <option value="Интернет-магазин, розничные товары">🛍️ Магазин товаров / Шоурум</option>
+              <option value="Бытовые услуги, монтаж, уборка">⚡ Услуги / Монтаж / Клининг</option>
+              <option value="IT, SaaS, мобильные приложения">💻 IT / Программы / Приложения</option>
+              <option value="Обучение, онлайн-курсы, репетитор">🎓 Обучение / Онлайн-курсы</option>
+              <option value="Юридические услуги, бухгалтерия">⚖️ Юристы / Бухгалтерия / Финансы</option>
+              <option value="Портфолио мастера, личный бренд">👤 Портфолио мастера / Эксперт</option>
             </select>
           </div>
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Тип сайта</label>
             <select id="siteType" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="landing">Landing Page</option>
-              <option value="corporate">Корпоративный</option>
-              <option value="saas">SaaS / Продукт</option>
-              <option value="ecommerce">Магазин</option>
-              <option value="portfolio">Портфолио</option>
-              <option value="blog">Блог / Медиа</option>
-              <option value="agency">Агентство</option>
+              <option value="landing" selected>📄 Одностраничник (Лендинг для продаж и рекламы)</option>
+              <option value="multipage">📑 Многостраничный сайт (Главная, Каталог, О компании, Отзывы, Контакты)</option>
+              <option value="ecommerce">🛍️ Каталог с карточками товаров и ценами</option>
+              <option value="portfolio">👤 Сайт-визитка (кратко о компании и контакты)</option>
             </select>
           </div>
         </div>
@@ -162,16 +159,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Стиль дизайна</label>
             <select id="styleSelect" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="modern premium like Linear/Stripe">Modern Premium (Linear/Stripe)</option>
-              <option value="glassmorphism + gradients">Glassmorphism + Gradients</option>
-              <option value="minimalism + typography">Minimalism Typography</option>
-              <option value="neomorphism soft">Neomorphism Soft</option>
-              <option value="brutalism bold">Brutalism Bold</option>
-              <option value="luxury dark + gold">Luxury Dark + Gold</option>
-              <option value="cyberpunk neon">Cyberpunk Neon</option>
-              <option value="corporate trust blue">Corporate Trust Blue</option>
-              <option value="claymorphism 3d">Claymorphism 3D</option>
-              <option value="startup friendly bright">Startup Friendly</option>
+              <option value="luxury dark + gold (дорогой темный стиль с золотом)">💎 Премиум и дорогой (тёмный фон, золотые/неоновые акценты)</option>
+              <option value="modern clean minimal (чистый светлый минимализм)">☀️ Светлый и современный (чистый, лёгкий, минимализм)</option>
+              <option value="corporate trust blue (деловой строгий синий)">🏛️ Деловой и надёжный (строгий корпоративный, доверительный синий)</option>
+              <option value="warm cozy aesthetic (уютный теплый бежевый)">☕ Тёплый и уютный (бежевый, дерево, пастельные тона)</option>
+              <option value="cyberpunk energetic neon (яркий молодежный драйв)">⚡ Яркий и динамичный (спорт, драйв, сочные градиенты)</option>
             </select>
           </div>
           <div>
@@ -734,7 +726,19 @@ async function callGenerateAPI(data){
     throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
   }
   
-  const system = `Ты — элитный веб-дизайнер уровня Apple, Stripe, Linear + senior frontend. Сгенерируй ОДИН ПОЛНЫЙ HTML файл сайта. Требования: один файл, Tailwind CDN, Google Fonts, GSAP для анимаций, современный премиум дизайн, анимации обязательно (fade-up, parallax, hover), картинки с https://images.unsplash.com, адаптив, интерактив (меню, форма, FAQ). Структура: header sticky blur, hero вау, фичи, о компании, соцдоказательства, тарифы/каталог, FAQ, контакты+форма, footer. Русский язык. Только HTML код, без объяснений, начни с <!DOCTYPE html>. Стиль: ${data.style}, цвета: ${data.colors || 'подбери премиум палитру'}`;
+  const system = `Ты — элитный веб-разработчик и дизайнер уровня Apple, Stripe, Linear.
+Твоя задача: сгенерировать ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
+ТРЕБОВАНИЯ:
+1. Используй Tailwind CSS CDN, Google Fonts, Lucide Icons или Font Awesome, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
+2. Картинки: реальные качественные фото с https://images.unsplash.com по теме ниши.
+3. ВАЖНО ПО ТИПУ САЙТА:
+   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные). Сделай так, чтобы пользователь кликал по меню и видел смену страниц, как на полноценном многостраничном портале!
+   - Если тип 'landing': сделай длинный продающий одностраничник с плавным якорным скроллом.
+   - Если тип 'ecommerce': подробный каталог карточек с ценами, фильтрацией, корзиной/модалкой заказа.
+4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
+5. Форма заявки: рабочая имитация отправки с всплывающим окном благодарности.
+6. Мобильная адаптивность: 100% идеальный вид на смартфонах и планшетах.
+7. Верни ТОЛЬКО чистый HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
@@ -903,21 +907,81 @@ function copyCode(){
   navigator.clipboard.writeText(currentHtml);
   toast('Код скопирован!', '📋');
 }
+
 function downloadSite(){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  openPricingModal();
+  if(!currentHtml){
+    toast('Сначала сгенерируйте сайт!', '⚠️');
+    return;
+  }
+  try{
+    const rawName = document.getElementById('siteName')?.value || 'site';
+    const siteName = rawName.trim().replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || 'website';
+    const filename = `${siteName}.html`;
+    const blob = new Blob([currentHtml], {type: 'text/html;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(()=>{
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 400);
+    toast(`Файл ${filename} успешно скачан! ⬇`, '✅');
+  }catch(e){
+    toast('Ошибка скачивания: ' + e.message, '❌');
+  }
 }
-function originalDownloadSite(){
+
+function copyCode(){
   if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  const blob = new Blob([currentHtml], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(document.getElementById('siteName').value || 'site').replace(/\s+/g,'-').toLowerCase()}.html`;
-  a.click();
-  URL.revokeObjectURL(url);
-  toast('Скачан!', '⬇');
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(currentHtml).then(()=>{
+      toast('Код скопирован в буфер! 📋', '✅');
+    }).catch(()=>{
+      fallbackCopy(currentHtml);
+    });
+  } else {
+    fallbackCopy(currentHtml);
+  }
 }
+
+function fallbackCopy(text){
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  try{
+    document.execCommand('copy');
+    toast('Код скопирован! 📋', '✅');
+  }catch(e){
+    toast('Не удалось скопировать', '❌');
+  }
+  document.body.removeChild(ta);
+}
+
+function openPricingModal(){
+  const m = document.getElementById('pricingModal');
+  if(m) m.classList.remove('hidden');
+}
+
+function selectTariff(name){
+  toast(`Выбран тариф: ${name}`, '💳');
+  setTimeout(()=>{
+    alert(`Оплата тарифа "${name}". Здесь подключается платёжный шлюз (ЮKassa / Robokassa). Вы можете скачать сайт прямо сейчас по кнопке "Скачать" в панели!`);
+  }, 200);
+}
+
+function actualDownloadSite(){
+  const m = document.getElementById('pricingModal');
+  if(m) m.classList.add('hidden');
+  downloadSite();
+}
+
+
 function openInNewTab(){
   if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
   const w = window.open();
