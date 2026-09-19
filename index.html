@@ -1093,48 +1093,133 @@ function insertImage(url){
 }
 
 async function generateImage(){
-  const prompt = document.getElementById('imagePrompt').value.trim();
-  if(!prompt) return toast('Опиши что сгенерить', '⚠️');
+  const promptInput = document.getElementById('imagePrompt');
+  const prompt = promptInput.value.trim();
+  if(!prompt) return toast('Опишите, какую картинку нарисовать', '⚠️');
   
   const apiKey = getKey();
   if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
   
-  toast('Генерю картинку... 10-20 сек', '🎨');
+  const genBtn = event?.currentTarget || document.querySelector('button[onclick*="generateImage"]');
+  if(genBtn) {
+    genBtn.disabled = true;
+    genBtn.innerHTML = '⏳ 0s';
+  }
   
+  toast('Нейросеть рисует картинку (~10-25 сек)...', '🎨');
+  
+  const startTime = Date.now();
+  const timerInterval = setInterval(()=>{
+    const s = Math.floor((Date.now() - startTime)/1000);
+    if(genBtn) genBtn.innerHTML = `⏳ ${s}s`;
+  }, 1000);
+  
+  const cont = document.getElementById('imageResults');
+  cont.classList.remove('hidden');
+  const placeholderId = 'loading_img_' + Date.now();
+  cont.insertAdjacentHTML('afterbegin', `
+    <div id="${placeholderId}" class="col-span-3 rounded-xl p-4 bg-white/5 border border-[#6C5CFF]/30 text-center flex flex-col items-center justify-center gap-2">
+      <div class="w-7 h-7 border-2 border-[#6C5CFF] border-t-transparent rounded-full animate-spin"></div>
+      <div class="text-[12px] text-white/80 font-medium">Нейросеть генерирует: "${prompt.slice(0,35)}..."</div>
+      <div class="text-[11px] text-white/40">Обычно занимает от 10 до 20 секунд</div>
+    </div>
+  `);
+
   try{
-    // Try backend
-    let result;
+    let imageUrl = null;
+    
+    // 1. Попробуем через бэкенд
     try{
-      const res = await fetch('/api/generate-image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, api_key: apiKey})});
-      if(res.ok) result = await res.json();
-    }catch{}
-    
-    if(!result || result.fallback){
-      // Direct
-      const resp = await fetch('https://polza.ai/api/v1/images/generations', {
+      const res = await fetch('/api/generate-image', {
         method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-        body: JSON.stringify({model:'bytedance/seedream-4.5', prompt, size:'1024x1024', n:1})
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({prompt, api_key: apiKey})
       });
-      if(!resp.ok) throw new Error('Image gen failed, попробуй другую модель');
-      result = await resp.json();
-      result.url = result.data?.[0]?.url;
+      if(res.ok){
+        const j = await res.json();
+        if(j.url && !j.fallback) imageUrl = j.url;
+      }
+    }catch(err){ console.log('Backend image gen fallback to direct', err); }
+    
+    // 2. Если бэкенд недоступен, вызываем Polza AI напрямую
+    if(!imageUrl){
+      const initRes = await fetch('https://polza.ai/api/v1/images/generations', {
+        method:'POST',
+        headers:{
+          'Content-Type':'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'bytedance/seedream-4.5',
+          prompt: prompt,
+          size: '1:1',
+          n: 1
+        })
+      });
+      
+      if(!initRes.ok){
+        const errData = await initRes.text();
+        throw new Error(`Ошибка Polza: ${errData.slice(0, 200)}`);
+      }
+      
+      const initData = await initRes.json();
+      const reqId = initData.requestId || initData.id;
+      
+      if(!reqId && initData.data?.[0]?.url){
+        imageUrl = initData.data[0].url;
+      } else if(reqId){
+        // Опрос статуса генерации
+        for(let i=0; i<25; i++){
+          await new Promise(r => setTimeout(r, 2000));
+          const checkRes = await fetch(`https://polza.ai/api/v1/images/${reqId}`, {
+            headers: {'Authorization': `Bearer ${apiKey}`}
+          });
+          if(checkRes.ok){
+            const checkData = await checkRes.json();
+            if(checkData.status === 'COMPLETED'){
+              imageUrl = checkData.url || checkData.images?.[0];
+              break;
+            } else if(checkData.status === 'FAILED' || checkData.status === 'ERROR'){
+              throw new Error('Генерация отклонена нейросетью');
+            }
+          }
+        }
+      }
     }
     
-    if(result.url){
-      const cont = document.getElementById('imageResults');
-      cont.classList.remove('hidden');
-      cont.innerHTML = `<div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/30">
-        <img src="${result.url}" class="w-full aspect-square object-cover">
-        <div class="p-2 flex gap-2">
-          <button onclick="insertImage('${result.url}')" class="flex-1 btn-primary py-1.5 rounded-lg text-[11px] text-white">Вставить в сайт</button>
-          <a href="${result.url}" target="_blank" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px]">Открыть</a>
-        </div>
-      </div>` + cont.innerHTML;
-      toast('Картинка готова!', '✦');
+    clearInterval(timerInterval);
+    document.getElementById(placeholderId)?.remove();
+    if(genBtn){ genBtn.disabled = false; genBtn.innerHTML = '✦ Gen'; }
+
+    if(!imageUrl){
+      throw new Error('Время ожидания картинки истекло, попробуйте еще раз');
     }
+    
+    // Показываем готовую картинку
+    cont.insertAdjacentHTML('afterbegin', `
+      <div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/40 bg-[#0F1320] p-2 space-y-2 group shadow-lg">
+        <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40">
+          <img src="${imageUrl}" class="w-full h-full object-cover">
+        </div>
+        <div class="text-[11px] text-white/70 truncate px-1">🎨 ${prompt}</div>
+        <div class="flex gap-2">
+          <button onclick="insertImage('${imageUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
+            <span>✦</span> Вставить в сайт
+          </button>
+          <a href="${imageUrl}" target="_blank" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
+            Открыть ↗
+          </a>
+        </div>
+      </div>
+    `);
+    
+    toast('Картинка успешно нарисована! 🎨', '✅');
   }catch(e){
+    clearInterval(timerInterval);
+    document.getElementById(placeholderId)?.remove();
+    if(genBtn){ genBtn.disabled = false; genBtn.innerHTML = '✦ Gen'; }
     toast(e.message, '❌');
+    console.error('Image Gen error:', e);
   }
 }
 

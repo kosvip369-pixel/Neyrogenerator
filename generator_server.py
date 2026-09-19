@@ -421,31 +421,54 @@ async def refine_site(req: RefineRequest):
 
 @app.post("/api/generate-image")
 async def generate_image(req: ImageGenRequest):
-    client = get_polza_client(req.api_key)
-    if not client:
+    key = req.api_key or POLZA_API_KEY
+    if not key:
         raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен")
     
-    model = req.model or DEFAULT_IMAGE_MODEL
+    model = req.model or "bytedance/seedream-4.5"
+    size = "1:1"  # Polza seedream requires 1:1, 16:9, etc.
     
     try:
-        # Polza использует OpenAI-совместимый API для изображений
-        resp = await client.images.generate(
-            model=model,
-            prompt=req.prompt,
-            size=req.size,
-            n=1
-        )
-        # В зависимости от провайдера ответ может быть url или b64
-        image_url = resp.data[0].url if hasattr(resp.data[0], 'url') and resp.data[0].url else None
-        b64 = resp.data[0].b64_json if hasattr(resp.data[0], 'b64_json') and resp.data[0].b64_json else None
-        
-        return {"url": image_url, "b64": b64, "model": model}
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            init_res = await client.post(
+                "https://polza.ai/api/v1/images/generations",
+                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                json={"model": model, "prompt": req.prompt, "size": size, "n": 1}
+            )
+            if not init_res.is_success:
+                err_text = init_res.text
+                raise Exception(f"Polza API Error ({init_res.status_code}): {err_text}")
+            
+            init_data = init_res.json()
+            req_id = init_data.get("requestId") or init_data.get("id")
+            if not req_id:
+                # Direct url fallback if any
+                if "data" in init_data and init_data["data"]:
+                    return {"url": init_data["data"][0].get("url"), "model": model}
+                raise Exception(f"Не получен requestId: {init_data}")
+            
+            # Poll status
+            for _ in range(25):
+                await asyncio.sleep(2.0)
+                status_res = await client.get(
+                    f"https://polza.ai/api/v1/images/{req_id}",
+                    headers={"Authorization": f"Bearer {key}"}
+                )
+                if status_res.is_success:
+                    st_data = status_res.json()
+                    status = st_data.get("status")
+                    if status == "COMPLETED":
+                        image_url = st_data.get("url") or (st_data.get("images", [None])[0])
+                        return {"url": image_url, "model": model}
+                    elif status in ("FAILED", "CANCELED", "ERROR"):
+                        raise Exception(f"Генерация отклонена: {st_data}")
+            
+            raise Exception("Таймаут генерации изображения (больше 50 сек)")
     except Exception as e:
-        # Fallback - вернем Unsplash URL по промпту
-        fallback_url = f"https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=1024&h=1024&fit=crop&q=80"
-        print(f"Image gen failed {model}: {e}, fallback to unsplash")
-        # Попробуем через чат-модель сгенерить поисковый запрос для unsplash
+        print(f"Image generation error: {e}")
+        fallback_url = f"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1024&h=1024&fit=crop"
         return {"url": fallback_url, "error": str(e), "fallback": True}
+
 
 @app.post("/api/search-images")
 async def search_images(req: ImageSearchRequest):
