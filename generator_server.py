@@ -542,7 +542,48 @@ async def get_templates():
             return json.load(f)
     return []
 
+
+# ---------- Publishing Endpoints ----------
+PUBLISHED_DIR = Path(__file__).parent / "published"
+PUBLISHED_DIR.mkdir(exist_ok=True)
+
+class PublishRequest(BaseModel):
+    html: str
+    slug: Optional[str] = None
+    site_name: Optional[str] = None
+
+@app.post("/api/publish")
+async def publish_site(req: PublishRequest, request: Request):
+    import uuid
+    slug = (req.slug or "").strip().lower()
+    slug = re.sub(r'[^a-z0-9_-]', '-', slug).strip('-')
+    if not slug:
+        name_slug = re.sub(r'[^a-zA-Z0-9_-]', '-', (req.site_name or "site").lower()).strip('-')
+        slug = f"{name_slug}-{uuid.uuid4().hex[:6]}" if name_slug else f"site-{uuid.uuid4().hex[:8]}"
+    
+    file_path = PUBLISHED_DIR / f"{slug}.html"
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(req.html)
+    
+    base_url = str(request.base_url).rstrip('/')
+    return {
+        "status": "ok",
+        "slug": slug,
+        "path": f"/p/{slug}",
+        "full_url": f"{base_url}/p/{slug}"
+    }
+
+@app.get("/p/{slug}")
+async def view_published_site(slug: str):
+    clean_slug = re.sub(r'[^a-z0-9_-]', '', slug.lower())
+    file_path = PUBLISHED_DIR / f"{clean_slug}.html"
+    if file_path.exists():
+        with open(file_path, "r", encoding="utf-8") as f:
+            return HTMLResponse(content=f.read())
+    raise HTTPException(status_code=404, detail="Сайт не найден")
+
 @app.get("/")
+
 
 async def serve_index():
     index_path = Path(__file__).parent / "index.html"

@@ -52,6 +52,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 @keyframes typing{0%,60%,100%{opacity:0.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
 .code-block{background:#0A0E1A;border:1px solid #1E2540}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body class="min-h-screen relative">
 <!-- Background -->
@@ -247,7 +248,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <button onclick="openFullscreen()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">⛶ Full</button>
         <button onclick="toggleCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">{"</>"} Код</button>
         <button onclick="copyCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">📋 Копировать</button>
-        <button onclick="downloadSite()" class="btn-primary px-4 py-1.5 rounded-lg text-[12px] font-bold text-white">⬇ Скачать</button>
+        <button onclick="downloadSite()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white">⬇ Скачать</button>
+        <button onclick="openDeployModal()" class="btn-primary px-3.5 py-1.5 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 bg-gradient-to-r from-[#00D492] to-[#00D9FF] hover:opacity-95 shadow-lg shadow-[#00D492]/25">
+          <span>🚀</span> Опубликовать
+        </button>
       </div>
     </div>
 
@@ -359,10 +363,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     <div class="glass rounded-[20px] p-4 space-y-3">
       <h3 class="font-space font-semibold text-[13px]">Экспорт и деплой</h3>
       <div class="grid grid-cols-2 gap-2">
-        <button onclick="downloadSite()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">⬇ HTML</button>
-        <button onclick="copyCode()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">📋 Копировать</button>
-        <button onclick="openInNewTab()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">↗ Открыть</button>
-        <button onclick="shareSite()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">🔗 Поделиться</button>
+        <button onclick="openDeployModal()" class="btn-primary col-span-2 py-2.5 rounded-xl text-[12px] font-bold text-white flex items-center justify-center gap-1.5 bg-gradient-to-r from-[#00D492] to-[#00D9FF]">🚀 Опубликовать сайт</button>
+        <button onclick="downloadSite()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">⬇ Скачать HTML</button>
+        <button onclick="downloadHostingZip()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">📦 ZIP для хостинга</button>
+        <button onclick="copyCode()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">📋 Скопировать код</button>
+        <button onclick="openInNewTab()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">↗ В новой вкладке</button>
       </div>
       <div class="pt-2 border-t border-white/5">
         <div class="text-[11px] font-mono text-white/40 mb-2">История генераций</div>
@@ -1411,6 +1416,114 @@ setTimeout(checkKeyOnStart, 800);
       <button onclick="actualDownloadSite()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-[12px] transition flex items-center gap-1.5 whitespace-nowrap">
         <span>⬇</span> Скачать бесплатно (Тест)
       </button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Deploy Modal (Публикация сайта) -->
+<div id="deployModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+  <div class="glass-strong rounded-[24px] max-w-[760px] w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto border border-white/10 relative">
+    <button onclick="document.getElementById('deployModal').classList.add('hidden')" class="absolute top-5 right-5 w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition">✕</button>
+
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#00D492] to-[#00D9FF] flex items-center justify-center text-[24px] shadow-lg shadow-[#00D492]/20">🚀</div>
+      <div>
+        <h2 class="font-space font-bold text-[22px] sm:text-[24px] text-white">Выгрузка и публикация сайта</h2>
+        <p class="text-[13px] text-white/60">Выберите удобный способ запуска сайта в интернете</p>
+      </div>
+    </div>
+
+    <!-- Options Tabs / Cards -->
+    <div class="space-y-4">
+      
+      <!-- Option 1: Instant Direct Public Link -->
+      <div class="glass p-5 rounded-2xl border border-[#00D492]/40 bg-[#00D492]/5 space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="text-[20px]">🌐</span>
+            <div>
+              <div class="font-bold text-[15px] text-white flex items-center gap-2">
+                Мгновенная ссылка в интернет
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492] text-black font-bold">Самый простой</span>
+              </div>
+              <div class="text-[12px] text-white/60 mt-0.5">Сайт сразу будет доступен по прямой ссылке с защитой HTTPS</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <div class="relative flex-1">
+            <input id="publishSlug" type="text" placeholder="Желаемое имя (например: stroy-krd)" class="input-field w-full px-3.5 py-2.5 rounded-xl text-[13px]">
+          </div>
+          <button onclick="publishInstantLink()" id="publishBtn" class="btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white flex items-center gap-1.5 whitespace-nowrap bg-gradient-to-r from-[#00D492] to-[#00D9FF]">
+            <span>🚀</span> Опубликовать
+          </button>
+        </div>
+
+        <div id="publishResult" class="hidden p-3.5 rounded-xl bg-black/40 border border-[#00D492]/30 space-y-2">
+          <div class="text-[11px] text-[#00D492] font-semibold flex items-center gap-1">
+            <span>✓</span> Сайт успешно опубликован и доступен в сети:
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="publishedUrlInput" readonly class="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-[12px] text-white font-mono flex-1 select-all">
+            <button onclick="copyPublishedUrl()" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px] font-bold text-white whitespace-nowrap">📋 Копия</button>
+            <a id="publishedUrlLink" href="#" target="_blank" class="btn-primary px-3 py-1.5 rounded-lg text-[11px] font-bold text-white whitespace-nowrap">Открыть ↗</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Option 2: Full ZIP Package for Beget / Timeweb / Reg.ru -->
+      <div class="glass p-5 rounded-2xl border border-white/10 hover:border-white/20 transition space-y-3">
+        <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2.5">
+            <span class="text-[20px]">📦</span>
+            <div>
+              <div class="font-bold text-[15px] text-white">Готовый ZIP-архив для хостинга (Beget, Timeweb, Reg.ru)</div>
+              <div class="text-[12px] text-white/60 mt-0.5">Полный комплект: index.html + robots.txt + sitemap.xml + инструкция за 2 минуты</div>
+            </div>
+          </div>
+        </div>
+        <p class="text-[12px] text-white/50 leading-relaxed">
+          Идеально, если у вас уже есть любой хостинг. Просто перетащите скачанный ZIP в панель хостинга — и сайт сразу заработает на вашем домене.
+        </p>
+        <button onclick="downloadHostingZip()" class="btn-ghost w-full py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 flex items-center justify-center gap-2">
+          <span>📦</span> Скачать готовый ZIP для хостинга
+        </button>
+      </div>
+
+      <!-- Option 3: Deploy to Client's Personal GitHub -->
+      <div class="glass p-5 rounded-2xl border border-white/10 hover:border-white/20 transition space-y-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-[20px]">🐙</span>
+          <div>
+            <div class="font-bold text-[15px] text-white">Выгрузка на личный GitHub клиента (GitHub Pages)</div>
+            <div class="text-[12px] text-white/60 mt-0.5">Создаст репозиторий в вашем GitHub и сразу включит бесплатный сайт на github.io</div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
+          <input id="clientGhToken" type="password" placeholder="GitHub Personal Access Token (ghp_...)" class="input-field px-3 py-2 rounded-xl text-[12px]">
+          <input id="clientGhRepo" type="text" placeholder="Имя репозитория (например: my-site)" class="input-field px-3 py-2 rounded-xl text-[12px]">
+        </div>
+        <button onclick="deployToClientGitHub()" id="clientGhBtn" class="btn-ghost w-full py-2.5 rounded-xl text-[12px] font-bold text-white hover:bg-white/10 flex items-center justify-center gap-2">
+          <span>🚀</span> Создать репозиторий и опубликовать на GitHub
+        </button>
+        <div id="clientGhResult" class="hidden p-3 rounded-xl bg-black/40 border border-[#6C5CFF]/30 text-[12px] space-y-1"></div>
+      </div>
+
+      <!-- Option 4: How to connect custom .ru domain -->
+      <div class="glass p-4 rounded-xl border border-white/5 text-[12px] text-white/60 space-y-1.5">
+        <div class="font-bold text-white flex items-center gap-1.5">
+          <span>💡</span> Как привязать свой домен .ru (например, сайт.ру)?
+        </div>
+        <div class="leading-relaxed">
+          1. Купите домен на <b>Beget</b> или <b>Reg.ru</b> (стоит ~190 ₽/год).<br>
+          2. Если используете хостинг — загрузите скачанный ZIP в корень сайта.<br>
+          3. Если используете прямую ссылку — укажите CNAME запись в настройках домена.
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
