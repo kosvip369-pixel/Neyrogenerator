@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  generator:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - POLZA_API_KEY=${POLZA_API_KEY:-pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4}
+      - POLZA_BASE_URL=https://polza.ai/api/v1
+      - PORT=8000
+    restart: unless-stopped
