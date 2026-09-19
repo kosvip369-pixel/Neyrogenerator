@@ -64,12 +64,13 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 <!-- Header -->
 <header class="sticky top-0 z-50 glass-strong border-b border-white/5">
   <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/40 text-lg">✦</div>
+    <div class="flex items-center gap-3 cursor-pointer select-none group" onclick="handleLogoClick()" title="Нажмите 3 раза для входа владельца">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/40 text-lg group-hover:scale-105 transition">✦</div>
       <div>
         <div class="font-space font-bold text-[17px] leading-tight text-white flex items-center gap-2">
           NeuraSite AI
-          <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
+          <span id="ownerBadge" class="hidden text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold shadow animate-pulse">👑 ВЛАДЕЛЕЦ</span>
+          <span id="versionBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
         </div>
         <div class="text-[11px] text-white/50 font-mono tracking-wider">AI-ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
       </div>
@@ -79,8 +80,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="btn-ghost px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-[#8B7DFF] border-[#6C5CFF]/30 flex items-center gap-1.5 hover:bg-[#6C5CFF]/10 transition">
         <span>⚡</span> <span>Шаблоны</span>
       </button>
-      <button onclick="openPricingModal()" class="btn-primary px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-white flex items-center gap-1.5 shadow-lg shadow-[#6C5CFF]/20">
+      <button id="tariffsHeaderBtn" onclick="openPricingModal()" class="btn-primary px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-white flex items-center gap-1.5 shadow-lg shadow-[#6C5CFF]/20">
         <span>💳</span> <span>Тарифы</span>
+      </button>
+      <button id="ownerStatusBtn" onclick="openOwnerModal()" class="hidden px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#FFE17B] flex items-center gap-1.5 shadow">
+        <span>👑</span> <span>VIP Безлимит</span>
       </button>
     </div>
   </div>
@@ -1411,7 +1415,8 @@ setTimeout(checkKeyOnStart, 800);
     <!-- Free test download button for developer & demo -->
     <div class="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
       <div class="text-[12px] text-white/50">
-        🔒 Тестовый режим активен (вы можете протестировать скачивание бесплатно):
+        🔒 Для доступа оформите тариф или войдите как владелец:
+        <button onclick="document.getElementById('pricingModal').classList.add('hidden'); openOwnerModal();" class="text-[#FFE17B] underline font-bold ml-1 hover:text-white">👑 Ввести PIN владельца</button>
       </div>
       <button onclick="actualDownloadSite()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-[12px] transition flex items-center gap-1.5 whitespace-nowrap">
         <span>⬇</span> Скачать бесплатно (Тест)
@@ -1524,6 +1529,27 @@ setTimeout(checkKeyOnStart, 800);
         </div>
       </div>
 
+    </div>
+  </div>
+</div>
+
+
+<!-- Owner PIN Modal (Секретный вход владельца) -->
+<div id="ownerPinModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+  <div class="glass-strong rounded-[24px] max-w-[420px] w-full p-6 sm:p-8 border border-[#D4AF37]/40 shadow-2xl relative text-center">
+    <button onclick="document.getElementById('ownerPinModal').classList.add('hidden')" class="absolute top-4 right-4 w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white">✕</button>
+
+    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B38728] flex items-center justify-center text-[30px] mx-auto mb-4 shadow-xl shadow-[#D4AF37]/30">👑</div>
+    <h3 class="font-space font-bold text-[20px] text-white mb-1">Режим владельца</h3>
+    <p class="text-[13px] text-white/60 mb-6">Введите секретный PIN-код для включения полного безлимитного доступа</p>
+
+    <div class="space-y-4">
+      <input id="ownerPinInput" type="password" maxlength="10" placeholder="••••" class="bg-black/60 border-2 border-[#D4AF37]/50 rounded-2xl py-3 px-4 text-center font-mono text-[24px] tracking-widest text-[#FFE17B] w-full outline-none focus:border-[#FFE17B] transition" onkeyup="if(event.key==='Enter') verifyOwnerPin()">
+      
+      <button onclick="verifyOwnerPin()" class="w-full py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold text-[14px] shadow-lg shadow-[#D4AF37]/30 hover:brightness-110 transition">
+        Войти как владелец 👑
+      </button>
+      <div id="ownerPinError" class="text-[12px] text-red-400 font-medium hidden">Неверный PIN-код</div>
     </div>
   </div>
 </div>
