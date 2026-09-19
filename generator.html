@@ -62,57 +62,38 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 
 <!-- Header -->
 <header class="sticky top-0 z-50 glass-strong border-b border-white/5">
-  <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
-    <div class="flex items-center gap-6">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/30">N</div>
-        <div>
-          <div class="font-space font-bold text-[16px] leading-none">NeuraSite AI</div>
-          <div class="text-[11px] text-white/50 font-mono tracking-wider">GENERATOR v2.0 • POLZA AI</div>
+  <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/40 text-lg">✦</div>
+      <div>
+        <div class="font-space font-bold text-[17px] leading-tight text-white flex items-center gap-2">
+          NeuraSite AI
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
         </div>
-      </div>
-      <div class="hidden lg:flex items-center gap-2">
-        <div class="px-3 py-1 rounded-full bg-[#00D492]/10 border border-[#00D492]/20 text-[#00D492] text-[11px] font-mono">● LIVE</div>
-        <div class="px-3 py-1 rounded-full bg-white/5 border border-white/10 text-white/60 text-[11px] font-mono">400+ моделей Polza</div>
+        <div class="text-[11px] text-white/50 font-mono tracking-wider">AI-ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
       </div>
     </div>
-    <div class="flex items-center gap-2 md:gap-3">
-      <div id="keyWrapper" class="hidden md:flex items-center gap-2 glass px-3 py-2 rounded-xl border-2 border-transparent transition-all">
-        <div id="keyDot" class="w-2 h-2 rounded-full bg-[#FF4D8D] animate-pulse"></div>
-        <input id="polzaKey" type="password" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4" placeholder="Polza API ключ (sk-...)" class="bg-transparent text-[13px] w-[240px] outline-none placeholder:text-white/30 font-mono">
-        <button onclick="toggleKey()" class="text-white/40 hover:text-white/80 text-[12px]">👁</button>
-        <button onclick="saveKey()" class="btn-primary px-2.5 py-1 rounded-lg text-[11px] text-white font-bold">OK</button>
-      </div>
-      <select id="modelSelect" class="hidden md:block glass px-3 py-2 rounded-xl text-[13px] outline-none bg-[#151A2D] border border-white/10">
-        <option value="anthropic/claude-sonnet-4-5">🔥 Claude Sonnet 4.5 — лучший для фронта</option>
-        <option value="openai/gpt-5">💎 GPT-5 — премиум логика</option>
-        <option value="google/gemini-2.5-pro">🎨 Gemini 2.5 Pro — креатив 1M контекст</option>
-        <option value="deepseek/deepseek-v3.2">⚡ DeepSeek V3.2 — быстро/дешево</option>
-        <option value="qwen/qwen3-235b-a22b:free">🆓 Qwen3 235B — бесплатно</option>
-      </select>
-      <a href="https://polza.ai/register" target="_blank" class="btn-ghost px-3 md:px-4 py-2 rounded-xl text-[13px] font-medium whitespace-nowrap">Получить ключ</a>
-      <button onclick="document.getElementById('brainsModal').classList.remove('hidden')" class="btn-primary px-3 md:px-4 py-2 rounded-xl text-[13px] font-bold text-white whitespace-nowrap">🧠 Мозги</button>
+    
+    <div class="flex items-center gap-2 sm:gap-3">
+      <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="btn-ghost px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-[#8B7DFF] border-[#6C5CFF]/30 flex items-center gap-1.5 hover:bg-[#6C5CFF]/10 transition">
+        <span>⚡</span> <span>Шаблоны</span>
+      </button>
+      <button onclick="openPricingModal()" class="btn-primary px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-white flex items-center gap-1.5 shadow-lg shadow-[#6C5CFF]/20">
+        <span>💳</span> <span>Тарифы</span>
+      </button>
     </div>
   </div>
-  <!-- Mobile key -->
-  <div class="md:hidden px-4 pb-3 flex gap-2">
-    <div id="keyWrapperMobile" class="flex-1 flex items-center gap-2 glass px-3 py-2 rounded-xl border-2 border-transparent">
-      <input id="polzaKeyMobile" type="password" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4" placeholder="Polza API ключ" class="bg-transparent text-[13px] w-full outline-none placeholder:text-white/30 font-mono">
-      <button onclick="saveKey()" class="btn-primary px-3 py-1 rounded-lg text-[11px] text-white font-bold">OK</button>
-    </div>
-    <select id="modelSelectMobile" class="glass px-2 py-2 rounded-xl text-[12px] outline-none bg-[#151A2D] max-w-[140px]">
-      <option value="anthropic/claude-sonnet-4-5">Claude 4.5</option>
-      <option value="openai/gpt-5">GPT-5</option>
-      <option value="google/gemini-2.5-pro">Gemini Pro</option>
-      <option value="deepseek/deepseek-v3.2">DeepSeek</option>
-      <option value="qwen/qwen3-235b-a22b:free">Qwen Free</option>
-    </select>
-  </div>
-  <!-- Key banner -->
-  <div id="keyBanner" class="hidden bg-gradient-to-r from-[#FF4D8D]/20 to-[#6C5CFF]/20 border-y border-[#FF4D8D]/20 px-4 md:px-6 py-2.5 flex items-center justify-between gap-3 text-[13px]">
-    <div class="flex items-center gap-2"><span class="text-[16px]">🔑</span><span><b>Нужен Polza API ключ</b> — без него генерация не работает. Вставь ключ в поле выше ↑ или нажми "Получить ключ". Ключ сохраняется в браузере.</span></div>
-    <button onclick="document.getElementById('keyModal').classList.remove('hidden')" class="btn-primary px-3 py-1 rounded-lg text-[12px] text-white whitespace-nowrap">Где взять ключ?</button>
-  </div>
+
+  <!-- Hidden inputs for seamless background API functioning -->
+  <input id="polzaKey" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
+  <input id="polzaKeyMobile" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
+  <input id="keyModalInput" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
+  <select id="modelSelect" class="hidden">
+    <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
+  </select>
+  <select id="modelSelectMobile" class="hidden">
+    <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
+  </select>
 </header>
 
 <!-- Main Layout -->
@@ -703,10 +684,7 @@ function checkKeyOnStart(){
   updateKeyUI();
   const k = getKey();
   if(!k){
-    setTimeout(()=>{
-      document.getElementById('keyModal').classList.remove('hidden');
-      toast('Сначала укажи Polza API ключ!', '🔑');
-    }, 1000);
+    // auto configured
   }
 }
 function setPrompt(t){ document.getElementById('mainPrompt').value = t; }
@@ -926,6 +904,10 @@ function copyCode(){
   toast('Код скопирован!', '📋');
 }
 function downloadSite(){
+  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
+  openPricingModal();
+}
+function originalDownloadSite(){
   if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
   const blob = new Blob([currentHtml], {type:'text/html'});
   const url = URL.createObjectURL(blob);
@@ -1191,6 +1173,95 @@ setTimeout(checkKeyOnStart, 800);
       <button onclick="document.getElementById('templatesModal').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white">✕</button>
     </div>
     <div id="templatesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+    </div>
+  </div>
+</div>
+
+
+<!-- Pricing Modal (Тарифы) -->
+<div id="pricingModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
+  <div class="glass-strong rounded-[24px] max-w-[850px] w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto border border-white/10 relative">
+    <button onclick="document.getElementById('pricingModal').classList.add('hidden')" class="absolute top-5 right-5 w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition">✕</button>
+
+    <div class="text-center max-w-[500px] mx-auto mb-8">
+      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#6C5CFF]/15 border border-[#6C5CFF]/30 text-[#8B7DFF] text-[12px] font-mono mb-3">
+        ⚡ ДОСТУП К СКАЧИВАНИЮ И КОДУ
+      </div>
+      <h2 class="font-space font-bold text-[24px] sm:text-[28px] text-white">Тарифы на генерацию</h2>
+      <p class="text-white/60 text-[13px] sm:text-[14px] mt-1">Выберите подходящий пакет для скачивания готового сайта с чистым кодом и анимациями</p>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <!-- 1 Site -->
+      <div class="glass p-5 rounded-2xl border border-white/10 flex flex-col justify-between hover:border-[#6C5CFF]/40 transition">
+        <div>
+          <div class="text-[12px] text-white/50 font-mono uppercase tracking-wider mb-1">Разовый</div>
+          <h3 class="font-space font-bold text-[20px] text-white mb-2">1 Сайт</h3>
+          <div class="flex items-baseline gap-1 mb-4">
+            <span class="text-[28px] font-extrabold text-white">490</span>
+            <span class="text-[16px] text-white/60 font-medium">₽</span>
+          </div>
+          <ul class="space-y-2 text-[12px] text-white/70">
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Скачивание чистого HTML</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Все стили и анимации</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 5 доработок в чате</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Мобильная адаптация</li>
+          </ul>
+        </div>
+        <button onclick="selectTariff('1 сайт (490 ₽)')" class="mt-6 w-full btn-ghost py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition">Выбрать</button>
+      </div>
+
+      <!-- 3 Sites (Popular) -->
+      <div class="glass p-5 rounded-2xl border-2 border-[#6C5CFF] relative flex flex-col justify-between bg-gradient-to-b from-[#6C5CFF]/10 to-transparent shadow-xl shadow-[#6C5CFF]/10">
+        <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-[#6C5CFF] to-[#00D9FF] text-white text-[11px] font-bold uppercase tracking-wider shadow">Хит продаж</div>
+        <div>
+          <div class="text-[12px] text-[#8B7DFF] font-mono uppercase tracking-wider mb-1">Пакет «Старт»</div>
+          <h3 class="font-space font-bold text-[20px] text-white mb-2">3 Сайта</h3>
+          <div class="flex items-baseline gap-1 mb-4">
+            <span class="text-[28px] font-extrabold text-white">990</span>
+            <span class="text-[16px] text-white/60 font-medium">₽</span>
+            <span class="text-[12px] text-white/40 line-through ml-2">1 470 ₽</span>
+          </div>
+          <ul class="space-y-2 text-[12px] text-white/80">
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 3 уникальных сайта</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 330 ₽ за один сайт</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Безлимитные чат-правки</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> ИИ-генерация картинок</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Пожизненное владение</li>
+          </ul>
+        </div>
+        <button onclick="selectTariff('Пакет Старт (990 ₽)')" class="mt-6 w-full btn-primary py-2.5 rounded-xl text-[13px] font-bold text-white transition">Купить пакет</button>
+      </div>
+
+      <!-- 10 Sites -->
+      <div class="glass p-5 rounded-2xl border border-white/10 flex flex-col justify-between hover:border-[#6C5CFF]/40 transition">
+        <div>
+          <div class="text-[12px] text-white/50 font-mono uppercase tracking-wider mb-1">Для профи</div>
+          <h3 class="font-space font-bold text-[20px] text-white mb-2">10 Сайтов</h3>
+          <div class="flex items-baseline gap-1 mb-4">
+            <span class="text-[28px] font-extrabold text-white">2 490</span>
+            <span class="text-[16px] text-white/60 font-medium">₽</span>
+            <span class="text-[12px] text-white/40 line-through ml-2">4 900 ₽</span>
+          </div>
+          <ul class="space-y-2 text-[12px] text-white/70">
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 10 полноценных сайтов</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 249 ₽ за один сайт</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Приоритетная генерация</li>
+            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Поддержка и консультации</li>
+          </ul>
+        </div>
+        <button onclick="selectTariff('Пакет Маркетолог (2490 ₽)')" class="mt-6 w-full btn-ghost py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition">Выбрать</button>
+      </div>
+    </div>
+
+    <!-- Free test download button for developer & demo -->
+    <div class="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+      <div class="text-[12px] text-white/50">
+        🔒 Тестовый режим активен (вы можете протестировать скачивание бесплатно):
+      </div>
+      <button onclick="actualDownloadSite()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-[12px] transition flex items-center gap-1.5 whitespace-nowrap">
+        <span>⬇</span> Скачать бесплатно (Тест)
+      </button>
     </div>
   </div>
 </div>
