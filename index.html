@@ -1507,6 +1507,201 @@ generateSite = async function() {
   return baseGenerateSite();
 };
 
+
+// ---------- Deploy & Publishing Functions ----------
+function openDeployModal(){
+  if(!currentHtml){
+    toast('Сначала сгенерируйте сайт!', '⚠️');
+    return;
+  }
+  const siteName = document.getElementById('siteName')?.value || 'my-site';
+  const slug = siteName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 25);
+  const slugInput = document.getElementById('publishSlug');
+  if(slugInput && !slugInput.value) slugInput.value = slug;
+  
+  const repoInput = document.getElementById('clientGhRepo');
+  if(repoInput && !repoInput.value) repoInput.value = slug;
+  
+  document.getElementById('deployModal').classList.remove('hidden');
+}
+
+async function publishInstantLink(){
+  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
+  const slug = (document.getElementById('publishSlug')?.value || '').trim();
+  const siteName = document.getElementById('siteName')?.value || 'Site';
+  const btn = document.getElementById('publishBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Публикую...';
+
+  try{
+    // Try backend publish
+    const res = await fetch('/api/publish', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({html: currentHtml, slug: slug, site_name: siteName})
+    });
+    
+    let liveUrl = '';
+    if(res.ok){
+      const data = await res.json();
+      liveUrl = data.full_url || (window.location.origin + data.path);
+    } else {
+      // Fallback: create blob URL or share URL
+      const blob = new Blob([currentHtml], {type: 'text/html'});
+      liveUrl = URL.createObjectURL(blob);
+    }
+
+    const resBox = document.getElementById('publishResult');
+    resBox.classList.remove('hidden');
+    document.getElementById('publishedUrlInput').value = liveUrl;
+    document.getElementById('publishedUrlLink').href = liveUrl;
+    toast('Сайт успешно опубликован! 🚀', '✅');
+  }catch(e){
+    toast('Ошибка публикации: ' + e.message, '❌');
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = '<span>🚀</span> Опубликовать';
+  }
+}
+
+function copyPublishedUrl(){
+  const url = document.getElementById('publishedUrlInput').value;
+  if(!url) return;
+  if(navigator.clipboard && window.isSecureContext){
+    navigator.clipboard.writeText(url).then(()=>toast('Ссылка скопирована! 📋', '✅')).catch(()=>fallbackCopy(url));
+  } else {
+    fallbackCopy(url);
+  }
+}
+
+function downloadHostingZip(){
+  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
+  if(typeof JSZip === 'undefined'){
+    return toast('Библиотека ZIP загружается, подождите пару секунд...', '⏳');
+  }
+
+  const siteName = (document.getElementById('siteName')?.value || 'site').trim().replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_');
+  const zip = new JSZip();
+
+  // 1. index.html
+  zip.file("index.html", currentHtml);
+
+  // 2. robots.txt
+  const robots = "User-agent: *\nAllow: /\n\nSitemap: https://" + siteName + ".ru/sitemap.xml";
+  zip.file("robots.txt", robots);
+
+  // 3. sitemap.xml
+  const today = new Date().toISOString().split('T')[0];
+  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://' + siteName + '.ru/</loc>\n    <lastmod>' + today + '</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>';
+  zip.file("sitemap.xml", sitemap);
+
+  // 4. Instructions
+  const instruct = "КАК ЗАГРУЗИТЬ САЙТ НА ХОСТИНГ (Beget, Timeweb, Reg.ru)\n==================================================\n\n1. Зайдите в панель управления вашего хостинга (например, cp.beget.com).\n2. Откройте «Файловый менеджер» (File Manager).\n3. Перейдите в папку вашего сайта:\n   - На Beget: /ваш_домен/public_html/\n   - На Timeweb: /public_html/\n4. Нажмите кнопку «Загрузить файлы» и загрузите файлы из этого архива:\n   - index.html\n   - robots.txt\n   - sitemap.xml\n5. Всё готово! Сайт начнет открываться по вашему домену сразу же.\n";
+  zip.file("ИНСТРУКЦИЯ_ПО_ЗАГРУЗКЕ.txt", instruct);
+
+  // Generate ZIP
+  toast('Формирую ZIP-архив для хостинга... 📦', '⏳');
+  zip.generateAsync({type:"blob"}).then(function(content){
+    const a = document.createElement('a');
+    const url = URL.createObjectURL(content);
+    a.href = url;
+    a.download = siteName + '_hosting_pack.zip';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function(){
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 500);
+    toast('Архив ' + siteName + '_hosting_pack.zip скачан! 📦', '✅');
+  });
+}
+
+async function deployToClientGitHub(){
+  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
+  const token = (document.getElementById('clientGhToken')?.value || '').trim();
+  const repo = (document.getElementById('clientGhRepo')?.value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '-');
+  
+  if(!token){
+    toast('Введите ваш GitHub токен (Personal Access Token)', '⚠️');
+    return;
+  }
+  if(!repo){
+    toast('Укажите имя для репозитория', '⚠️');
+    return;
+  }
+
+  const btn = document.getElementById('clientGhBtn');
+  const resBox = document.getElementById('clientGhResult');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Создаю репозиторий на вашем GitHub...';
+  resBox.classList.remove('hidden');
+  resBox.innerHTML = '<div class="text-[#8B7DFF]">1. Проверяю токен и создаю репозиторий...</div>';
+
+  try{
+    const userRes = await fetch('https://api.github.com/user', {
+      headers: {'Authorization': 'token ' + token}
+    });
+    if(!userRes.ok) throw new Error('Неверный GitHub токен. Проверьте права токена (нужна галочка repo).');
+    const userData = await userRes.json();
+    const username = userData.login;
+
+    resBox.innerHTML = '<div class="text-[#8B7DFF]">2. Создаю репозиторий ' + username + '/' + repo + '...</div>';
+    const createRes = await fetch('https://api.github.com/user/repos', {
+      method: 'POST',
+      headers: {'Authorization': 'token ' + token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({name: repo, auto_init: true, description: 'Website created with NeuraSite AI'})
+    });
+    
+    await new Promise(function(r){ setTimeout(r, 2000); });
+
+    resBox.innerHTML = '<div class="text-[#8B7DFF]">3. Загружаю index.html в ветку main...</div>';
+    const contentB64 = btoa(unescape(encodeURIComponent(currentHtml)));
+    
+    let sha = null;
+    try{
+      const fCheck = await fetch('https://api.github.com/repos/' + username + '/' + repo + '/contents/index.html', {
+        headers: {'Authorization': 'token ' + token}
+      });
+      if(fCheck.ok){
+        const fData = await fCheck.json();
+        sha = fData.sha;
+      }
+    }catch(e){}
+
+    const putRes = await fetch('https://api.github.com/repos/' + username + '/' + repo + '/contents/index.html', {
+      method: 'PUT',
+      headers: {'Authorization': 'token ' + token, 'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message: 'feat: publish website via NeuraSite AI',
+        content: contentB64,
+        sha: sha || undefined
+      })
+    });
+    if(!putRes.ok) throw new Error('Не удалось загрузить index.html: ' + await putRes.text());
+
+    resBox.innerHTML = '<div class="text-[#8B7DFF]">4. Включаю GitHub Pages...</div>';
+    try{
+      await fetch('https://api.github.com/repos/' + username + '/' + repo + '/pages', {
+        method: 'POST',
+        headers: {'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json'},
+        body: JSON.stringify({source: {branch: 'main', path: '/'}})
+      });
+    }catch(e){}
+
+    const pagesUrl = 'https://' + username + '.github.io/' + repo + '/';
+    resBox.innerHTML = '<div class="text-[#00D492] font-bold">✓ Успешно выгружено в ваш GitHub!</div>' +
+      '<div class="text-white/80">Репозиторий: <a href="https://github.com/' + username + '/' + repo + '" target="_blank" class="underline text-[#8B7DFF]">' + username + '/' + repo + '</a></div>' +
+      '<div class="text-white/80">Ваш сайт (через 1-2 мин): <a href="' + pagesUrl + '" target="_blank" class="underline text-[#00D492] font-bold">' + pagesUrl + '</a></div>';
+    toast('Сайт выгружен в ваш GitHub! 🚀', '✅');
+  }catch(e){
+    resBox.innerHTML = '<div class="text-red-400 font-bold">Ошибка: ' + e.message + '</div>';
+    toast(e.message, '❌');
+  }finally{
+    btn.disabled = false;
+    btn.innerHTML = '<span>🚀</span> Создать репозиторий и опубликовать на GitHub';
+  }
+}
+
 </script>
 
 <!-- Templates Modal -->
