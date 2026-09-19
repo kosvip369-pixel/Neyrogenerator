@@ -774,7 +774,8 @@ async function callGenerateAPI(data){
 
 async function callRefineAPI(currentHtml, message){
   const apiKey = getKey();
-  const model = document.getElementById('modelSelect')?.value?.includes('haiku') ? getModel() : 'anthropic/claude-haiku-4-5';
+  // Always use high-intelligence Sonnet 4.5 for code refactoring
+  const model = 'anthropic/claude-sonnet-4-5';
   
   try{
     const res = await fetch('/api/refine', {
@@ -784,25 +785,78 @@ async function callRefineAPI(currentHtml, message){
     });
     if(res.ok){
       const j = await res.json();
-      return j.html;
+      return cleanHtmlCode(j.html);
     }
-  }catch(e){}
+  }catch(e){ console.log('Backend refine fallback to direct', e); }
 
-  if(!apiKey) throw new Error('Нужен Polza ключ');
+  if(!apiKey) throw new Error('Укажите Polza API ключ');
   
-  const system = `Ты senior frontend, дорабатываешь сайт. Дают текущий HTML и запрос что исправить. Верни ПОЛНЫЙ обновленный HTML, сохранив все остальное. Только код, без объяснений.`;
-  const user = `Запрос: ${message}\n\nТекущий HTML:\n${currentHtml.slice(0,80000)}\n\nВерни ПОЛНЫЙ обновленный HTML.`;
+  const system = `Ты — ведущий Senior Frontend Архитектор уровня Apple/Linear.
+Твоя задача — внести требуемые изменения в HTML код и вернуть ПОЛНЫЙ обновленный HTML файл.
+
+ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
+1. ЕСЛИ ПРОСЯТ СДЕЛАТЬ МНОГОСТРАНИЧНЫЙ САЙТ (или разделить на страницы):
+   - Перестрой верстку в полноценный SPA (Single Page Application)!
+   - Сделай отдельные экраны страниц (<div id="page-home" class="page-view">, <div id="page-catalog" class="page-view hidden">, <div id="page-about" class="page-view hidden">, <div id="page-reviews" class="page-view hidden">, <div id="page-contacts" class="page-view hidden">).
+   - В шапке ссылки в меню должны вызывать showPage('catalog') / showPage('about') / showPage('contacts') и плавно переключать страницы!
+   - Добавь функцию:
+     function showPage(id){
+       document.querySelectorAll('.page-view').forEach(p=>p.classList.add('hidden'));
+       const target = document.getElementById('page-'+id);
+       if(target){ target.classList.remove('hidden'); window.scrollTo({top:0, behavior:'smooth'}); }
+       const m = document.getElementById('mobileMenu');
+       if(m) m.classList.add('hidden');
+     }
+
+2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
+   - Кнопка мобильного меню ОБЯЗАНА 100% открывать и закрывать меню!
+   - Кнопка id="mobileMenuBtn", окно id="mobileMenu" (class="hidden fixed inset-0 z-50 ..."), кнопка закрытия id="closeMobileMenu".
+   - Внизу в <script> обязательно добавь:
+     const mBtn = document.getElementById('mobileMenuBtn');
+     const mMenu = document.getElementById('mobileMenu');
+     const cBtn = document.getElementById('closeMobileMenu');
+     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
+     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
+     document.querySelectorAll('#mobileMenu a').forEach(a => { a.onclick = () => mMenu && mMenu.classList.add('hidden'); });
+
+3. ВЕРНИ ТОЛЬКО ПОЛНЫЙ HTML КОД. Начни сразу с <!DOCTYPE html>. Без markdown, без объяснений.`;
+
+  const user = `Запрос на доработку: ${message}
+
+Текущий HTML код сайта:
+${currentHtml}
+
+Верни ПОЛНЫЙ ОБНОВЛЕННЫЙ HTML КОД с внесенными исправлениями. Только код.`;
   
   const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.7, max_tokens:16000})
+    body: JSON.stringify({
+      model: model,
+      messages:[
+        {role:'system', content:system},
+        {role:'user', content:user}
+      ],
+      temperature:0.6,
+      max_tokens:16000
+    })
   });
-  if(!resp.ok) throw new Error('Polza API error');
+  
+  if(!resp.ok){
+    const errText = await resp.text();
+    throw new Error(`Ошибка Polza API: ${errText.slice(0, 250)}`);
+  }
+  
   const j = await resp.json();
-  let html = j.choices[0].message.content;
-  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  return html;
+  let rawHtml = j.choices[0].message.content;
+  return cleanHtmlCode(rawHtml);
+}
+
+function cleanHtmlCode(raw){
+  if(!raw) return '';
+  const match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
+  if(match) return match[0].trim();
+  return raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
 }
 
 // ---------- Generate ----------
@@ -1045,7 +1099,7 @@ async function sendChat(){
     const newHtml = await callRefineAPI(currentHtml, msg);
     document.getElementById('typing')?.remove();
     renderPreview(newHtml);
-    addChatMessage('assistant', 'Готово! Исправил. Что еще улучшить?');
+    addChatMessage('assistant', `Готово! Внёс правки: «${msg}». Проверьте обновленный сайт в окне предпросмотра! ✨`);
     toast('Сайт обновлен!', '✦');
   }catch(e){
     document.getElementById('typing')?.remove();

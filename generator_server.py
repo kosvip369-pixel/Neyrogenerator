@@ -80,7 +80,17 @@ SITE_GENERATION_PROMPT = """Ты — элитный веб-дизайнер ур
    - Скругления 16-24px, мягкие тени
    - Темная или светлая тема в зависимости от ниши, но всегда премиум
 
-4. **Анимации ОБЯЗАТЕЛЬНО**:
+4. **Мобильное меню и интерактив ОБЯЗАТЕЛЬНО РАБОЧИЕ**:
+   - Кнопка гамбургер id="mobileMenuBtn" и меню id="mobileMenu" с кнопкой закрытия id="closeMobileMenu" ОБЯЗАНЫ иметь рабочий JS код:
+     const mBtn = document.getElementById('mobileMenuBtn');
+     const mMenu = document.getElementById('mobileMenu');
+     const cBtn = document.getElementById('closeMobileMenu');
+     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
+     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
+     document.querySelectorAll('#mobileMenu a').forEach(a => { a.onclick = () => mMenu && mMenu.classList.add('hidden'); });
+   - Если указан многостраничный сайт (multipage): сделай переключение экранов страниц через showPage('home'/'catalog'/'about'/'contacts').
+
+5. **Анимации ОБЯЗАТЕЛЬНО**:
    - Появление секций при скролле (fade-up, stagger)
    - Параллакс для hero
    - Hover эффекты с transform и transition
@@ -139,29 +149,55 @@ SITE_GENERATION_PROMPT = """Ты — элитный веб-дизайнер ур
 ФОРМАТ ОТВЕТА: Только HTML код, без markdown оберток, без ```html
 """
 
-REFINE_PROMPT = """Ты — senior frontend-разработчик, который дорабатывает существующий сайт.
-
+REFINE_PROMPT = """Ты — ведущий Senior Frontend Архитектор и дизайнер уровня Apple/Linear.
 Тебе дают:
 1. Текущий HTML код сайта
-2. Запрос пользователя что исправить/улучшить
+2. Запрос пользователя что изменить / исправить / добавить
 
-Твоя задача:
-- Внимательно прочитать запрос
-- Внести ТОЧЕЧНЫЕ изменения, сохранив всю остальную структуру и стиль
-- Если просят добавить секцию - добавь красиво в подходящее место
-- Если просят поменять цвета - поменяй везде согласованно
-- Если просят анимации - добавь GSAP или CSS анимации
-- Если просят картинки - замени src на более подходящие Unsplash URL
+ТВОЯ ЗАДАЧА: внести требуемые изменения и вернуть ПОЛНЫЙ, 100% РАБОЧИЙ HTML файл.
 
-ПРАВИЛА:
-1. Верни ПОЛНЫЙ обновленный HTML файл, не diff
-2. Сохрани все что не просили менять
-3. Код должен оставаться рабочим
-4. Не ломай верстку
-5. Улучшай, а не ухудшай дизайн
-6. Только HTML, без объяснений, без markdown
+КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:
+1. ЕСЛИ ПРОСЯТ СДЕЛАТЬ МНОГОСТРАНИЧНЫЙ САЙТ (или разделить на страницы):
+   - Перестрой структуру сайта в полноценный SPA (Single Page Application)!
+   - Сделай отдельные экраны страниц:
+     * id="page-home" (Главная страница)
+     * id="page-catalog" (Каталог / Услуги / Проекты с ценами и фильтрами)
+     * id="page-about" (О компании / Команда / Гарантии)
+     * id="page-reviews" (Отзывы и выполненные объекты)
+     * id="page-contacts" (Контакты / Форма заявки / Карта)
+   - В шапке сайта меню должно вызывать функцию showPage('catalog') и переключать страницы!
+   - Добавь рабочий JS:
+     function showPage(pageId){
+       document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+       const target = document.getElementById('page-' + pageId);
+       if(target){ target.classList.remove('hidden'); window.scrollTo({top:0, behavior:'smooth'}); }
+       const mMenu = document.getElementById('mobileMenu');
+       if(mMenu) mMenu.classList.add('hidden');
+     }
+   - При первом открытии показывать страницу 'home'.
 
-Текущий HTML будет в сообщении пользователя после запроса.
+2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
+   - Кнопка мобильного меню ОБЯЗАНА 100% работать!
+   - Структура в шапке:
+     <button id="mobileMenuBtn" class="lg:hidden ...">☰</button>
+     <div id="mobileMenu" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl p-6 flex flex-col items-center justify-center gap-6">
+       <button id="closeMobileMenu" class="absolute top-6 right-6 text-2xl text-white">✕</button>
+       <a href="#..." class="mobile-nav-link text-2xl">...</a>
+     </div>
+   - Внизу в скрипте:
+     const mBtn = document.getElementById('mobileMenuBtn');
+     const mMenu = document.getElementById('mobileMenu');
+     const cBtn = document.getElementById('closeMobileMenu');
+     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
+     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
+     document.querySelectorAll('#mobileMenu a, .mobile-nav-link').forEach(link => {
+       link.onclick = () => mMenu && mMenu.classList.add('hidden');
+     });
+
+3. ПРАВИЛА КОДА:
+   - Верни ПОЛНЫЙ HTML файл, начав сразу с <!DOCTYPE html>.
+   - НЕ обрезай код, сохрани все стили Tailwind, Google Fonts и GSAP анимации.
+   - Никаких пояснений, только чистый HTML код.
 """
 
 # ---------- Models ----------
@@ -398,7 +434,7 @@ async def generate_site(req: GenerateRequest):
 
 @app.post("/api/refine")
 async def refine_site(req: RefineRequest):
-    model = req.model or "anthropic/claude-haiku-4-5"  # для доработок быстрая модель
+    model = req.model or "anthropic/claude-sonnet-4-5"  # для доработок быстрая модель
     
     # Ограничим размер HTML для контекста (если слишком большой - обрежем)
     html_to_send = req.current_html
