@@ -72,7 +72,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <span id="ownerBadge" class="hidden text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold shadow animate-pulse">👑 ВЛАДЕЛЕЦ</span>
           <span id="versionBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
         </div>
-        <div class="text-[11px] text-white/50 font-mono tracking-wider">AI-ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
+        <div class="text-[11px] text-[#00D492] font-mono tracking-wider flex items-center gap-1"><span>📱</span> САЙТ СО СМАРТФОНА ЗА 30 СЕК</div>
       </div>
     </div>
     
@@ -100,6 +100,18 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
   </select>
 </header>
+
+  <!-- Mobile Navigation Switcher (Конструктор vs Предпросмотр) -->
+  <div class="lg:hidden sticky top-[65px] z-40 glass-strong border-b border-white/10 px-4 py-2 flex gap-2">
+    <button onclick="switchMobileTab('builder')" id="tabBtnBuilder" class="flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition">
+      <span>🛠️</span> <span>Конструктор</span>
+    </button>
+    <button onclick="switchMobileTab('preview')" id="tabBtnPreview" class="flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition">
+      <span>👁️</span> <span>Предпросмотр</span>
+      <span id="previewReadyBadge" class="hidden w-2 h-2 rounded-full bg-[#00D492] animate-ping"></span>
+    </button>
+  </div>
+
 
 <!-- Main Layout -->
 <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-[360px_1fr_340px] gap-4 md:gap-5 items-start">
@@ -150,7 +162,12 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         </div>
 
         <div>
-          <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Подробно</label>
+          <div class="flex items-center justify-between">
+            <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Подробно</label>
+            <button type="button" onclick="toggleVoiceInput()" id="voiceBtn" class="text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition">
+              <span id="voiceIcon">🎙️</span> <span id="voiceText">Голосовой ввод</span>
+            </button>
+          </div>
           <textarea id="mainPrompt" rows="5" class="input-field w-full mt-1.5 px-3.5 py-3 rounded-xl text-[14px] resize-none leading-relaxed" placeholder="Например: Современный лендинг для AI-студии которая делает сайты. Темный, премиум, как Linear и Stripe. Hero с градиентом, 3 фичи, тарифы, отзывы. Хочу вау-эффект, анимации, glassmorphism..."></textarea>
           <div class="flex gap-1.5 mt-2 flex-wrap">
             <button onclick="setPrompt('Лендинг для кофейни specialty coffee, уютный, теплый, минимализм, много фото кофе, меню, адрес')" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[11px] border border-white/5">☕ Кофейня</button>
@@ -217,23 +234,71 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px] text-[#8B7DFF] font-bold border-[#6C5CFF]/40 bg-[#6C5CFF]/10">⚡ Шаблоны</button>
     </div>
 
-    <!-- Image Tools -->
-    <div class="glass rounded-[20px] p-4 space-y-3">
-      <h3 class="font-space font-semibold text-[13px] flex items-center gap-2"><span class="w-5 h-5 rounded-md bg-[#FF4D8D]/20 flex items-center justify-center">◐</span> Картинки & Генерация</h3>
-      <div class="flex gap-2">
-        <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Найти картинку: business team">
-        <button onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍</button>
+    <!-- Image Tools: Поиск, Генерация и Нейро-Фотошоп -->
+    <div class="glass rounded-[20px] p-4 space-y-3.5 border border-white/10">
+      <div class="flex items-center justify-between">
+        <h3 class="font-space font-semibold text-[14px] flex items-center gap-2 text-white">
+          <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-[#FF4D8D] to-[#6C5CFF] flex items-center justify-center text-[13px]">📸</span> 
+          <span>Картинки & Нейро-Фотошоп</span>
+        </h3>
+        <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono">2-в-1</span>
       </div>
-      <div class="flex gap-2">
-        <input id="imagePrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Сгенерить: futuristic office, neon">
-        <button onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
+
+      <!-- Mode Tabs -->
+      <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/40 text-[11px] font-medium">
+        <button type="button" onclick="switchImgTool('photoshop')" id="toolTabPhotoshop" class="py-1.5 rounded-lg bg-[#6C5CFF] text-white font-bold transition">🪄 Фотошоп</button>
+        <button type="button" onclick="switchImgTool('generate')" id="toolTabGen" class="py-1.5 rounded-lg text-white/60 hover:text-white transition">✦ Нейросеть</button>
+        <button type="button" onclick="switchImgTool('search')" id="toolTabSearch" class="py-1.5 rounded-lg text-white/60 hover:text-white transition">🔍 Поиск</button>
       </div>
-      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto hidden"></div>
+
+      <!-- Tool 1: AI Photoshop (Upload + Edit) -->
+      <div id="toolPanelPhotoshop" class="space-y-2.5">
+        <div class="border-2 border-dashed border-white/15 hover:border-[#6C5CFF]/50 rounded-xl p-3 text-center cursor-pointer transition relative bg-white/[0.02]" onclick="document.getElementById('userPhotoInput').click()">
+          <input type="file" id="userPhotoInput" accept="image/*" class="hidden" onchange="handleUserPhotoSelected(event)">
+          <div id="uploadPromptBox" class="space-y-1">
+            <div class="text-[20px]">📁</div>
+            <div class="text-[12px] font-bold text-white">Загрузить своё фото</div>
+            <div class="text-[10px] text-white/40">С камеры или галереи телефона</div>
+          </div>
+          <div id="uploadedPreviewBox" class="hidden items-center justify-center gap-3">
+            <img id="uploadedThumb" src="" class="w-12 h-12 rounded-lg object-cover border border-white/20">
+            <div class="text-left">
+              <div class="text-[12px] font-bold text-[#00D492] flex items-center gap-1"><span>✓</span> Фото загружено</div>
+              <div class="text-[10px] text-white/50">Нажмите, чтобы сменить</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex gap-2">
+          <input id="photoshopPrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Что изменить? (напр: замени фон на закат с подсветкой)">
+          <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">
+            🪄 Изменить
+          </button>
+        </div>
+      </div>
+
+      <!-- Tool 2: AI Generate from scratch -->
+      <div id="toolPanelGenerate" class="space-y-2 hidden">
+        <div class="flex gap-2">
+          <input id="imagePrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Опишите картинку: luxury house with pool">
+          <button type="button" onclick="generateImage()" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] text-white font-bold whitespace-nowrap">✦ Gen</button>
+        </div>
+      </div>
+
+      <!-- Tool 3: Search Photos -->
+      <div id="toolPanelSearch" class="space-y-2 hidden">
+        <div class="flex gap-2">
+          <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск фото: автосервис, кофе, дом...">
+          <button type="button" onclick="searchImages()" class="btn-ghost px-3.5 py-2 rounded-xl text-[12px]">🔍 Найти</button>
+        </div>
+      </div>
+
+      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto hidden pt-1"></div>
     </div>
   </div>
 
   <!-- CENTER: Preview -->
-  <div class="order-1 lg:order-2 space-y-3">
+  <div id="previewCol" class="order-1 lg:order-2 space-y-3">
     <!-- Preview Toolbar -->
     <div class="glass rounded-[16px] p-2.5 flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2">
@@ -878,6 +943,10 @@ async function generateSite(){
   overlay.classList.remove('hidden');
   overlay.classList.add('flex');
   document.getElementById('previewPlaceholder').classList.add('hidden');
+  if(window.innerWidth < 1024) {
+    switchMobileTab('preview');
+    window.scrollTo({top: 0, behavior: 'smooth'});
+  }
   
   const steps = [
     'Подключаюсь к Polza AI...',
@@ -1755,6 +1824,180 @@ async function deployToClientGitHub(){
     btn.innerHTML = '<span>🚀</span> Создать репозиторий и опубликовать на GitHub';
   }
 }
+
+
+// ---------- Mobile View Tabs ----------
+function switchMobileTab(tab){
+  const bCol = document.getElementById('builderCol');
+  const pCol = document.getElementById('previewCol');
+  const bBtn = document.getElementById('tabBtnBuilder');
+  const pBtn = document.getElementById('tabBtnPreview');
+  
+  if(tab === 'builder'){
+    bCol.classList.remove('hidden');
+    pCol.classList.add('hidden');
+    bBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition';
+    pBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition';
+  } else {
+    bCol.classList.add('hidden');
+    pCol.classList.remove('hidden');
+    pBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition';
+    bBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition';
+    document.getElementById('previewReadyBadge')?.classList.add('hidden');
+  }
+}
+
+// ---------- Voice Input (Голосовой ввод 🎙️) ----------
+let recognition = null;
+let isRecording = false;
+
+function toggleVoiceInput(){
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRec){
+    return toast('Голосовой ввод не поддерживается вашим браузером', '⚠️');
+  }
+
+  const vBtn = document.getElementById('voiceBtn');
+  const vIcon = document.getElementById('voiceIcon');
+  const vText = document.getElementById('voiceText');
+  const textarea = document.getElementById('mainPrompt');
+
+  if(isRecording){
+    if(recognition) recognition.stop();
+    return;
+  }
+
+  recognition = new SpeechRec();
+  recognition.lang = 'ru-RU';
+  recognition.interimResults = true;
+  recognition.continuous = false;
+
+  recognition.onstart = function(){
+    isRecording = true;
+    vBtn.className = 'text-[12px] font-bold text-white bg-red-600 px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-pulse transition';
+    vIcon.textContent = '🔴';
+    vText.textContent = 'Слушаю...';
+    toast('Говорите в микрофон, я слушаю... 🎙️', '✦');
+  };
+
+  recognition.onresult = function(event){
+    let transcript = '';
+    for(let i = event.resultIndex; i < event.results.length; ++i){
+      transcript += event.results[i][0].transcript;
+    }
+    if(transcript){
+      const current = textarea.value.trim();
+      textarea.value = current ? (current + ' ' + transcript) : transcript;
+    }
+  };
+
+  recognition.onerror = function(event){
+    toast('Ошибка микрофона: ' + event.error, '❌');
+    stopVoiceUI();
+  };
+
+  recognition.onend = function(){
+    stopVoiceUI();
+    toast('Голос записан! 🎙️', '✅');
+  };
+
+  recognition.start();
+}
+
+function stopVoiceUI(){
+  isRecording = false;
+  const vBtn = document.getElementById('voiceBtn');
+  const vIcon = document.getElementById('voiceIcon');
+  const vText = document.getElementById('voiceText');
+  if(vBtn){
+    vBtn.className = 'text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition';
+    vIcon.textContent = '🎙️';
+    vText.textContent = 'Голосовой ввод';
+  }
+}
+
+// ---------- Image Tools Switcher & AI Photoshop ----------
+function switchImgTool(tool){
+  ['photoshop', 'generate', 'search'].forEach(t => {
+    const cap = t.charAt(0).toUpperCase() + t.slice(1);
+    const tab = document.getElementById('toolTab' + cap) || document.getElementById('toolTabGen');
+    const panel = document.getElementById('toolPanel' + cap);
+    if(tab) {
+      if(t === tool){
+        tab.className = 'py-1.5 rounded-lg bg-[#6C5CFF] text-white font-bold transition';
+      } else {
+        tab.className = 'py-1.5 rounded-lg text-white/60 hover:text-white transition';
+      }
+    }
+    if(panel){
+      if(t === tool) panel.classList.remove('hidden');
+      else panel.classList.add('hidden');
+    }
+  });
+}
+
+let uploadedBase64 = null;
+
+function handleUserPhotoSelected(e){
+  const file = e.target.files?.[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    uploadedBase64 = evt.target.result;
+    document.getElementById('uploadPromptBox').classList.add('hidden');
+    const prevBox = document.getElementById('uploadedPreviewBox');
+    prevBox.classList.remove('hidden');
+    prevBox.classList.add('flex');
+    document.getElementById('uploadedThumb').src = uploadedBase64;
+    toast('Фото загружено! Опишите, что изменить', '📸');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function applyAiPhotoshop(){
+  const editPrompt = (document.getElementById('photoshopPrompt')?.value || '').trim();
+  if(!uploadedBase64 && !editPrompt){
+    return toast('Загрузите фото или опишите задачу для ИИ', '⚠️');
+  }
+
+  const promptText = editPrompt || 'Премиальное качественное фото в современном стиле, профессиональный свет';
+  document.getElementById('imagePrompt').value = promptText;
+  
+  toast('Нейро-Фотошоп обрабатывает фото (~15-20 сек)... 🪄', '🎨');
+  await generateImage();
+}
+
+// ---------- Chat Credits Counter ----------
+function updateChatCreditsUI(){
+  const isOwner = checkIsOwner();
+  const display = document.getElementById('chatCreditsDisplay');
+  if(!display) return;
+  
+  if(isOwner){
+    display.textContent = '👑 VIP Безлимит';
+    display.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#FFE17B] font-mono border border-[#D4AF37]/50 font-bold';
+  } else {
+    const left = parseInt(localStorage.getItem('guest_chat_credits') ?? '3');
+    display.textContent = `Осталось правок: ${Math.max(0, left)}`;
+    display.className = `text-[11px] px-2 py-0.5 rounded-full ${left > 0 ? 'bg-[#6C5CFF]/20 text-[#8B7DFF]' : 'bg-red-500/20 text-red-400'} font-mono border border-current font-bold`;
+  }
+}
+setTimeout(updateChatCreditsUI, 300);
+
+// Wrap sendChat with credit checks
+const baseSendChat = sendChat;
+sendChat = async function(){
+  if(!checkIsOwner()){
+    let left = parseInt(localStorage.getItem('guest_chat_credits') ?? '3');
+    if(left <= 0){
+      openPricingModal();
+      return toast('Правки по бесплатному тарифу закончились. Выберите тариф!', '💳');
+    }
+    localStorage.setItem('guest_chat_credits', String(left - 1));
+    updateChatCreditsUI();
+  }
+  return baseSendChat();
+};
 
 </script>
 
