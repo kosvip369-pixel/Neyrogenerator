@@ -164,8 +164,8 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <div>
           <div class="flex items-center justify-between">
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Подробно</label>
-            <button type="button" onclick="toggleVoiceInput()" id="voiceBtn" class="text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition">
-              <span id="voiceIcon">🎙️</span> <span id="voiceText">Голосовой ввод</span>
+            <button type="button" onclick="startVoiceInput('mainPrompt', 'voiceBtnMain')" id="voiceBtnMain" class="text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition">
+              <span>🎙️</span> <span>Голосовой ввод</span>
             </button>
           </div>
           <textarea id="mainPrompt" rows="5" class="input-field w-full mt-1.5 px-3.5 py-3 rounded-xl text-[14px] resize-none leading-relaxed" placeholder="Например: Современный лендинг для AI-студии которая делает сайты. Темный, премиум, как Linear и Stripe. Hero с градиентом, 3 фичи, тарифы, отзывы. Хочу вау-эффект, анимации, glassmorphism..."></textarea>
@@ -270,7 +270,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         </div>
 
         <div class="flex gap-2">
-          <input id="photoshopPrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Что изменить? (напр: замени фон на закат с подсветкой)">
+          <div class="relative flex-1">
+            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Что изменить? (напр: замени фон на закат с подсветкой)">
+            <button type="button" onclick="startVoiceInput('photoshopPrompt', 'voiceBtnPhotoshop')" id="voiceBtnPhotoshop" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[14px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать голосом">🎙️</button>
+          </div>
           <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">
             🪄 Изменить
           </button>
@@ -280,7 +283,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <!-- Tool 2: AI Generate from scratch -->
       <div id="toolPanelGenerate" class="space-y-2 hidden">
         <div class="flex gap-2">
-          <input id="imagePrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Опишите картинку: luxury house with pool">
+          <div class="relative flex-1">
+            <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Опишите картинку: luxury house with pool">
+            <button type="button" onclick="startVoiceInput('imagePrompt', 'voiceBtnImage')" id="voiceBtnImage" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[14px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать голосом">🎙️</button>
+          </div>
           <button type="button" onclick="generateImage()" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] text-white font-bold whitespace-nowrap">✦ Gen</button>
         </div>
       </div>
@@ -422,8 +428,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <button onclick="quickChat('Добавь секцию тарифов')" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[11px] border border-white/5">💳 Тарифы</button>
         </div>
         <div class="flex gap-2">
-          <input id="chatInput" class="input-field flex-1 px-3.5 py-2.5 rounded-xl text-[13px]" placeholder="Что исправить? Например: сделай кнопку больше" onkeydown="if(event.key==='Enter') sendChat()">
-          <button onclick="sendChat()" class="btn-primary w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold">↑</button>
+          <div class="relative flex-1">
+            <input id="chatInput" class="input-field w-full px-3.5 py-2.5 pr-10 rounded-xl text-[13px]" placeholder="Что исправить? Например: сделай кнопку больше" onkeydown="if(event.key==='Enter') sendChat()">
+            <button type="button" onclick="startVoiceInput('chatInput', 'voiceBtnChat')" id="voiceBtnChat" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[15px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать правку голосом">🎙️</button>
+          </div>
+          <button onclick="sendChat()" class="btn-primary w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">↑</button>
         </div>
       </div>
     </div>
@@ -1847,73 +1856,90 @@ function switchMobileTab(tab){
   }
 }
 
-// ---------- Voice Input (Голосовой ввод 🎙️) ----------
-let recognition = null;
-let isRecording = false;
+// ---------- Universal Voice Input Engine (Zero-Stuttering) ----------
+let activeRecognition = null;
+let activeTargetId = null;
+let activeBtnId = null;
+let baseTextBeforeVoice = '';
 
-function toggleVoiceInput(){
+function startVoiceInput(inputId, btnId){
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
   if(!SpeechRec){
     return toast('Голосовой ввод не поддерживается вашим браузером', '⚠️');
   }
 
-  const vBtn = document.getElementById('voiceBtn');
-  const vIcon = document.getElementById('voiceIcon');
-  const vText = document.getElementById('voiceText');
-  const textarea = document.getElementById('mainPrompt');
+  const target = document.getElementById(inputId);
+  const btn = document.getElementById(btnId);
+  if(!target) return;
 
-  if(isRecording){
-    if(recognition) recognition.stop();
+  // Toggle off if already recording this input
+  if(activeRecognition && activeTargetId === inputId){
+    activeRecognition.stop();
     return;
   }
+  
+  if(activeRecognition){
+    try{ activeRecognition.stop(); }catch(e){}
+  }
 
-  recognition = new SpeechRec();
-  recognition.lang = 'ru-RU';
-  recognition.interimResults = true;
-  recognition.continuous = false;
+  activeTargetId = inputId;
+  activeBtnId = btnId;
+  baseTextBeforeVoice = target.value.trim();
 
-  recognition.onstart = function(){
-    isRecording = true;
-    vBtn.className = 'text-[12px] font-bold text-white bg-red-600 px-2.5 py-1 rounded-lg flex items-center gap-1.5 animate-pulse transition';
-    vIcon.textContent = '🔴';
-    vText.textContent = 'Слушаю...';
+  activeRecognition = new SpeechRec();
+  activeRecognition.lang = 'ru-RU';
+  activeRecognition.interimResults = false; // Strictly false prevents stutter & repeated words
+  activeRecognition.maxAlternatives = 1;
+
+  activeRecognition.onstart = function(){
+    if(btn){
+      btn.dataset.prevHtml = btn.innerHTML;
+      btn.classList.add('bg-red-600', 'text-white', 'animate-pulse');
+      btn.innerHTML = '🔴';
+    }
     toast('Говорите в микрофон, я слушаю... 🎙️', '✦');
   };
 
-  recognition.onresult = function(event){
-    let transcript = '';
-    for(let i = event.resultIndex; i < event.results.length; ++i){
-      transcript += event.results[i][0].transcript;
-    }
-    if(transcript){
-      const current = textarea.value.trim();
-      textarea.value = current ? (current + ' ' + transcript) : transcript;
+  activeRecognition.onresult = function(event){
+    if(event.results && event.results.length > 0){
+      const spoken = event.results[0][0].transcript.trim();
+      if(spoken){
+        target.value = baseTextBeforeVoice ? (baseTextBeforeVoice + ' ' + spoken) : spoken;
+        target.dispatchEvent(new Event('input'));
+        toast(`Распознано: «${spoken.slice(0, 35)}...» 🎙️`, '✅');
+      }
     }
   };
 
-  recognition.onerror = function(event){
-    toast('Ошибка микрофона: ' + event.error, '❌');
+  activeRecognition.onerror = function(event){
+    if(event.error !== 'no-speech'){
+      toast('Микрофон: ' + event.error, '❌');
+    }
     stopVoiceUI();
   };
 
-  recognition.onend = function(){
+  activeRecognition.onend = function(){
     stopVoiceUI();
-    toast('Голос записан! 🎙️', '✅');
   };
 
-  recognition.start();
+  try{
+    activeRecognition.start();
+  }catch(e){
+    stopVoiceUI();
+  }
 }
 
 function stopVoiceUI(){
-  isRecording = false;
-  const vBtn = document.getElementById('voiceBtn');
-  const vIcon = document.getElementById('voiceIcon');
-  const vText = document.getElementById('voiceText');
-  if(vBtn){
-    vBtn.className = 'text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition';
-    vIcon.textContent = '🎙️';
-    vText.textContent = 'Голосовой ввод';
+  if(activeBtnId){
+    const btn = document.getElementById(activeBtnId);
+    if(btn){
+      btn.classList.remove('bg-red-600', 'text-white', 'animate-pulse');
+      if(btn.dataset.prevHtml) btn.innerHTML = btn.dataset.prevHtml;
+    }
   }
+  activeRecognition = null;
+  activeTargetId = null;
+  activeBtnId = null;
 }
 
 // ---------- Image Tools Switcher & AI Photoshop ----------
