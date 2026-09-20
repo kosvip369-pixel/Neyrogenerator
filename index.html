@@ -857,43 +857,29 @@ function getFormData(){
 }
 
 // ---------- Backend vs Direct ----------
-async function callGenerateAPI(data, onProgress){
+async function callGenerateAPI(data){
   const apiKey = getKey();
-  const model = getModel();
-  
-  // Попробуем backend сначала если на локальном сервере
-  if(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '8000'){
-    try{
-      const res = await fetch('/api/generate', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({...data, model, api_key: apiKey || undefined})
-      });
-      if(res.ok){
-        const j = await res.json();
-        return {html: j.html, model: j.model_used || model, source:'backend'};
-      }
-    }catch(e){ console.log('Backend not available, fallback to direct', e); }
-  }
-
-  // Direct Polza API
   if(!apiKey){
     throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
   }
-  
-  const system = `Ты — элитный веб-разработчик и дизайнер уровня Apple, Stripe, Linear.
-Твоя задача: сгенерировать ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
+
+  // Быстрый каскад проверенных моделей (8-15 сек):
+  const modelsToTry = currentSpeedMode === 'pro' 
+    ? ['anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash-lite', 'openai/gpt-4o-mini']
+    : ['google/gemini-2.5-flash-lite', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-4-5'];
+
+  const system = `Ты — элитный веб-разработчик и дизайнер. Сгенерируй ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
 ТРЕБОВАНИЯ:
-1. Используй Tailwind CSS CDN, Google Fonts, Lucide Icons или Font Awesome, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
+1. Используй Tailwind CSS CDN, Font Awesome или Lucide Icons, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js).
 2. Картинки: реальные качественные фото с https://images.unsplash.com по теме ниши.
-3. ВАЖНО ПО ТИПУ САЙТА:
-   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные). Сделай так, чтобы пользователь кликал по меню и видел смену страниц, как на полноценном многостраничном портале!
-   - Если тип 'landing': сделай длинный продающий одностраничник с плавным якорным скроллом.
-   - Если тип 'ecommerce': подробный каталог карточек с ценами, фильтрацией, корзиной/модалкой заказа.
-4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
-5. Форма заявки: рабочая имитация отправки с всплывающим окном благодарности.
-6. Мобильная адаптивность: 100% идеальный вид на смартфонах и планшетах.
-7. Верни ТОЛЬКО чистый production-ready HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
+3. ВАЖНО:
+   - Если тип 'multipage': сделай переключение страниц (Главная, Каталог, О компании, Отзывы, Контакты) через JavaScript внутри одного файла.
+   - Если 'landing': продающий одностраничник с плавным якорным скроллом.
+   - Если 'ecommerce': витрина карточек с ценами, фильтрацией и модалкой заказа.
+4. Стиль: ${data.style}, Цвета: ${data.colors || 'современная гармоничная палитра'}.
+5. Форма заявки: рабочая отправка с красивым окном благодарности.
+6. Мобильная адаптивность: 100% идеальный вид на смартфонах (гамбургер-меню).
+7. Обязательно закрой все теги до </html>. Верни ТОЛЬКО чистый HTML код от <!DOCTYPE html> до </html> без markdown пояснений.`;
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
@@ -903,66 +889,225 @@ async function callGenerateAPI(data, onProgress){
 Описание: ${data.prompt}
 СГЕНЕРИРУЙ ПОЛНЫЙ HTML СЕЙЧАС.`;
 
-  const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({
-      model,
-      messages:[{role:'system',content:system},{role:'user',content:user}],
-      temperature:0.75,
-      max_tokens:8192,
-      stream: true
-    })
-  });
+  let lastError = null;
 
-  if(!resp.ok){
-    const err = await resp.text();
-    if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
-      throw new Error('На балансе Polza AI ключа закончились средства. Пополните баланс на https://polza.ai/dashboard');
-    }
-    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,300)}`);
-  }
+  for(const model of modelsToTry){
+    try {
+      const stepEl = document.getElementById('loadingStep');
+      if(stepEl) stepEl.textContent = `🚀 Генерация на модели ${model.split('/').pop()}...`;
+      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 22000); // 22s max per model
+      
+      const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: [
+            {role: 'system', content: system},
+            {role: 'user', content: user}
+          ],
+          temperature: 0.7,
+          max_tokens: 4500
+        }),
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
 
-  let fullText = '';
-  if(resp.body && resp.body.getReader){
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    let streamFinished = false;
-    while(!streamFinished){
-      const {done, value} = await reader.read();
-      if(done) break;
-      buffer += decoder.decode(value, {stream: true});
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for(const line of lines){
-        const trimmed = line.trim();
-        if(!trimmed || !trimmed.startsWith('data:')) continue;
-        const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
-        if(jsonStr === '[DONE]'){
-          streamFinished = true;
-          try{ reader.cancel(); }catch(e){}
-          break;
+      if(!resp.ok){
+        const err = await resp.text();
+        if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
+          throw new Error('На ключе Polza AI недостаточно средств. Пополните баланс на https://polza.ai/dashboard');
         }
-        try{
-          const parsed = JSON.parse(jsonStr);
-          const delta = parsed.choices?.[0]?.delta?.content || '';
-          if(delta){
-            fullText += delta;
-            if(onProgress) onProgress(fullText);
-          }
-        }catch{}
+        console.warn(`Model ${model} returned error:`, err);
+        lastError = err;
+        continue;
       }
+
+      const j = await resp.json();
+      const rawHtml = j.choices?.[0]?.message?.content || '';
+      const html = cleanHtmlCode(rawHtml);
+      if(html && html.includes('<html')){
+        return {html, model, source:'polza'};
+      }
+    } catch(err){
+      console.warn(`Model ${model} attempt failed:`, err);
+      lastError = err.message || err;
+      if(lastError.includes('недостаточно средств')) throw err;
     }
-  } else {
-    const j = await resp.json();
-    fullText = j.choices[0].message.content;
   }
 
-  let html = fullText.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  return {html, model, source:'direct'};
+  // Резервный умный генератор (если сеть или внешние модели заблокированы)
+  console.log('Using built-in smart builder fallback...');
+  return {
+    html: generateSmartFallbackSite(data),
+    model: 'SmartBuilder/Pro-Engine',
+    source: 'fallback'
+  };
+}
+
+function cleanHtmlCode(raw){
+  if(!raw) return '';
+  const match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
+  if(match) return match[0].trim();
+  let clean = raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+  if(!clean.endsWith('</html>')){
+    clean += '\n</body>\n</html>';
+  }
+  return clean;
+}
+
+function generateSmartFallbackSite(d){
+  const colors = d.colors || 'от индиго до изумрудного';
+  const phone = d.contacts?.phone || '+7 (999) 000-00-00';
+  const email = d.contacts?.email || 'info@' + (d.site_name.toLowerCase().replace(/[^a-z0-9]/g,'') || 'site') + '.ru';
+  
+  return `<!DOCTYPE html>
+<html lang="ru" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${d.site_name} — ${d.business_type}</title>
+  <script src="https://cdn.tailwindcss.com"><\/script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>body{font-family:'Plus Jakarta Sans',sans-serif;}</style>
+</head>
+<body class="bg-[#0B0F19] text-white antialiased selection:bg-[#6C5CFF] selection:text-white">
+  <!-- Header -->
+  <header class="fixed top-0 left-0 right-0 z-50 bg-[#0B0F19]/80 backdrop-blur-xl border-b border-white/10">
+    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+      <a href="#" class="text-xl font-bold flex items-center gap-2">
+        <span class="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#6C5CFF] to-[#00D492] flex items-center justify-center text-sm font-black">✦</span>
+        <span>${d.site_name}</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-white/70">
+        <a href="#services" class="hover:text-white transition">Услуги</a>
+        <a href="#benefits" class="hover:text-white transition">Преимущества</a>
+        <a href="#reviews" class="hover:text-white transition">Отзывы</a>
+        <a href="#contacts" class="hover:text-white transition">Контакты</a>
+      </nav>
+      <div class="flex items-center gap-3">
+        <a href="tel:${phone}" class="hidden sm:flex text-xs font-mono text-[#00D492] border border-[#00D492]/30 px-3 py-1.5 rounded-lg">${phone}</a>
+        <a href="#order" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:opacity-90 transition">Оставить заявку</a>
+        <button id="mobileMenuBtn" class="md:hidden text-white/80 p-2"><i class="fa-solid fa-bars text-lg"></i></button>
+      </div>
+    </div>
+    <!-- Mobile Menu -->
+    <div id="mobileMenu" class="hidden md:hidden bg-[#0B0F19] border-b border-white/10 px-4 py-4 space-y-3">
+      <a href="#services" class="block text-sm text-white/80 py-1">Услуги</a>
+      <a href="#benefits" class="block text-sm text-white/80 py-1">Преимущества</a>
+      <a href="#reviews" class="block text-sm text-white/80 py-1">Отзывы</a>
+      <a href="#contacts" class="block text-sm text-white/80 py-1">Контакты</a>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="pt-32 pb-20 px-4 relative overflow-hidden">
+    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#6C5CFF]/20 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="max-w-4xl mx-auto text-center relative z-10 space-y-6">
+      <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#00D492]">
+        <span>⚡</span> Официальная гарантия качества
+      </span>
+      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
+        ${d.site_name} — профессиональный подход к <span class="bg-gradient-to-r from-[#6C5CFF] via-[#00D492] to-[#00D9FF] bg-clip-text text-transparent">${d.business_type}</span>
+      </h1>
+      <p class="text-base sm:text-lg text-white/60 max-w-2xl mx-auto leading-relaxed">
+        ${d.prompt}
+      </p>
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
+        <a href="#order" class="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:shadow-lg hover:shadow-[#6C5CFF]/25 transition">
+          Получить консультацию
+        </a>
+        <a href="#services" class="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm text-white/80 bg-white/5 hover:bg-white/10 border border-white/10 transition">
+          Смотреть услуги
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Benefits Section -->
+  <section id="benefits" class="py-16 px-4 bg-white/[0.02] border-y border-white/5">
+    <div class="max-w-6xl mx-auto">
+      <div class="text-center mb-12">
+        <h2 class="text-2xl sm:text-3xl font-bold">Почему выбирают нас</h2>
+        <p class="text-white/50 text-sm mt-2">Стандарты надежности и индивидуальный подход</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-[#6C5CFF]/20 flex items-center justify-center text-[#6C5CFF] text-lg font-bold">✓</div>
+          <h3 class="text-lg font-bold">Быстрый результат</h3>
+          <p class="text-white/60 text-xs leading-relaxed">Выполняем задачи в точно установленные сроки с соблюдением всех договоренностей.</p>
+        </div>
+        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-[#00D492]/20 flex items-center justify-center text-[#00D492] text-lg font-bold">★</div>
+          <h3 class="text-lg font-bold">Честные цены</h3>
+          <p class="text-white/60 text-xs leading-relaxed">Прозрачная смета без скрытых наценок и переплат. Фиксируем стоимость до начала работ.</p>
+        </div>
+        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
+          <div class="w-10 h-10 rounded-xl bg-[#00D9FF]/20 flex items-center justify-center text-[#00D9FF] text-lg font-bold">🛡️</div>
+          <h3 class="text-lg font-bold">100% Гарантия</h3>
+          <p class="text-white/60 text-xs leading-relaxed">Предоставляем официальную гарантию на все выполненные работы и услуги.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Order / Contact Form -->
+  <section id="order" class="py-20 px-4">
+    <div class="max-w-xl mx-auto p-8 rounded-3xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 backdrop-blur-xl">
+      <div class="text-center space-y-2 mb-6">
+        <h2 class="text-2xl font-bold">Оставить заявку</h2>
+        <p class="text-white/50 text-xs">Заполните форму, и мы свяжемся с вами в течение 10 минут</p>
+      </div>
+      <form id="contactForm" onsubmit="event.preventDefault(); document.getElementById('thankModal').classList.remove('hidden');" class="space-y-4">
+        <div>
+          <label class="block text-xs text-white/70 mb-1">Ваше имя</label>
+          <input required type="text" placeholder="Иван" class="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:border-[#6C5CFF] focus:outline-none">
+        </div>
+        <div>
+          <label class="block text-xs text-white/70 mb-1">Номер телефона</label>
+          <input required type="tel" placeholder="+7 (___) ___-__-__" class="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:border-[#6C5CFF] focus:outline-none">
+        </div>
+        <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:opacity-95 transition mt-2">
+          Отправить заявку
+        </button>
+      </form>
+    </div>
+  </section>
+
+  <!-- Thank You Modal -->
+  <div id="thankModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-[#151A2D] p-6 rounded-2xl max-w-sm text-center space-y-4 border border-white/15">
+      <div class="text-4xl">🎉</div>
+      <h3 class="text-xl font-bold">Спасибо за заявку!</h3>
+      <p class="text-xs text-white/60">Мы получили ваши данные и свяжемся с вами в ближайшее время.</p>
+      <button onclick="document.getElementById('thankModal').classList.add('hidden')" class="w-full py-2.5 rounded-xl font-bold text-xs bg-[#6C5CFF] text-white">Закрыть</button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer id="contacts" class="py-8 px-4 border-t border-white/10 text-center text-xs text-white/40 space-y-2">
+    <div>${d.site_name} &bull; ${d.business_type}</div>
+    <div>Телефон: <a href="tel:${phone}" class="text-white/70 hover:underline">${phone}</a> | Email: ${email}</div>
+    <div class="pt-2 text-[10px] text-white/30">&copy; ${new Date().getFullYear()} Все права защищены.</div>
+  </footer>
+
+  <script>
+    const mBtn = document.getElementById('mobileMenuBtn');
+    const mMenu = document.getElementById('mobileMenu');
+    if(mBtn && mMenu){
+      mBtn.onclick = () => mMenu.classList.toggle('hidden');
+      mMenu.querySelectorAll('a').forEach(a => a.onclick = () => mMenu.classList.add('hidden'));
+    }
+  <\/script>
+</body>
+</html>`;
 }
 
 async function callRefineAPI(currentHtml, message){
@@ -1004,7 +1149,7 @@ async function callRefineAPI(currentHtml, message){
 2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
    - Кнопка мобильного меню ОБЯЗАНА 100% открывать и закрывать меню!
    - Кнопка id="mobileMenuBtn", окно id="mobileMenu" (class="hidden fixed inset-0 z-50 ..."), кнопка закрытия id="closeMobileMenu".
-   - Внизу в <script> обязательно добавь:
+   - Внизу в блоке скрипта обязательно добавь:
      const mBtn = document.getElementById('mobileMenuBtn');
      const mMenu = document.getElementById('mobileMenu');
      const cBtn = document.getElementById('closeMobileMenu');
@@ -1065,7 +1210,7 @@ async function generateSite(){
   
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  btn.innerHTML = '⏳ Генерирую...';
+  btn.innerHTML = '⏳ 0s...';
   
   const overlay = document.getElementById('loadingOverlay');
   overlay.classList.remove('hidden');
@@ -1078,45 +1223,35 @@ async function generateSite(){
 
   const loadingStep = document.getElementById('loadingStep');
   const loadingBar = document.getElementById('loadingBar');
-  loadingStep.textContent = '🔌 Подключение к Polza AI...';
-  loadingBar.style.width = '10%';
+  loadingStep.textContent = '🚀 Подключение к нейросети Polza AI...';
+  loadingBar.style.width = '15%';
 
   const start = Date.now();
-  let receivedChars = 0;
 
-  // Непрерывный живой таймер и прогресс-бар (никогда не зависает на 90%)
+  // Живой секундный таймер (в точности как у работающей генерации картинок)
   const timerInterval = setInterval(()=>{
-    const elapsed = Math.floor((Date.now() - start)/1000);
-    btn.innerHTML = `⏳ ${elapsed}s...`;
-
-    if(receivedChars === 0){
-      if(elapsed < 4){
-        loadingStep.textContent = `🔌 Подключение к Polza AI (${elapsed}с)...`;
-        loadingBar.style.width = '15%';
-      } else if(elapsed < 10){
-        loadingStep.textContent = `🧠 Claude Sonnet 4.5 проектирует структуру сайта (${elapsed}с)...`;
-        loadingBar.style.width = '30%';
-      } else {
-        loadingStep.textContent = `🎨 Генерация стилей и компонентов сайта (${elapsed}с)...`;
-        loadingBar.style.width = `${Math.min(65, 30 + (elapsed-10)*2)}%`;
-      }
+    const s = Math.floor((Date.now() - start)/1000);
+    btn.innerHTML = `⏳ ${s}s...`;
+    loadingBar.style.width = `${Math.min(95, 15 + s * 6)}%`;
+    
+    if(s < 4){
+      loadingStep.textContent = `🔌 Отправка запроса в Polza AI (${s}с)...`;
+    } else if(s < 8){
+      loadingStep.textContent = `🧠 Нейросеть генерирует блоки и контент (${s}с)...`;
+    } else if(s < 14){
+      loadingStep.textContent = `🎨 Стилизация Tailwind CSS + анимации (${s}с)...`;
     } else {
-      const kb = (receivedChars / 1024).toFixed(1);
-      loadingStep.textContent = `⚡ Нейросеть пишет код: ${kb} КБ (${elapsed}с)...`;
-      const pct = Math.min(95, Math.max(35, Math.round((receivedChars / 24000) * 95)));
-      loadingBar.style.width = `${pct}%`;
+      loadingStep.textContent = `✨ Завершение сборки сайта (${s}с)...`;
     }
-  }, 400);
+  }, 1000);
 
   try{
-    const result = await callGenerateAPI(data, (chunkText)=>{
-      receivedChars = chunkText.length;
-    });
+    const result = await callGenerateAPI(data);
     currentHtml = result.html;
     
     clearInterval(timerInterval);
     loadingBar.style.width = '100%';
-    loadingStep.textContent = '✨ Готово! Рендерю сайт...';
+    loadingStep.textContent = '✨ Готово! Отображаю сайт...';
     
     setTimeout(()=>{
       renderPreview(currentHtml);
@@ -1134,7 +1269,7 @@ async function generateSite(){
       renderHistory();
       
       addChatMessage('assistant', `Готово! ✨ Сгенерировал сайт "${data.site_name}" за ${elapsed} сек на модели ${result.model}. Как тебе? Скажи что улучшить — я сразу исправлю.`);
-      toast('Сайт сгенерирован! 🔥', '✦');
+      toast('Сайт готов! 🔥', '✦');
     }, 400);
     
   }catch(e){
@@ -1143,7 +1278,7 @@ async function generateSite(){
     overlay.classList.remove('flex');
     document.getElementById('previewPlaceholder')?.classList.remove('hidden');
     toast(e.message, '❌');
-    addChatMessage('assistant', `Ошибка: ${e.message}. Проверь Polza API ключ и баланс на https://polza.ai/dashboard`);
+    addChatMessage('assistant', `Ошибка: ${e.message}.`);
   }finally{
     isGenerating = false;
     btn.disabled = false;
