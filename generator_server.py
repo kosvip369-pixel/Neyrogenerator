@@ -419,7 +419,7 @@ async def generate_site(req: GenerateRequest):
     ]
     
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.85, max_tokens=16000)
+        html = await call_polza_chat(messages, model, req.api_key, temperature=0.75, max_tokens=8192)
         
         # Проверка что это HTML
         if "<!DOCTYPE" not in html and "<html" not in html:
@@ -450,7 +450,7 @@ async def refine_site(req: RefineRequest):
     ]
     
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=16000)
+        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=8192)
         return {"html": html, "model_used": model}
     except HTTPException:
         raise

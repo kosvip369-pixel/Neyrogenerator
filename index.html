@@ -803,22 +803,24 @@ function getFormData(){
 }
 
 // ---------- Backend vs Direct ----------
-async function callGenerateAPI(data){
+async function callGenerateAPI(data, onProgress){
   const apiKey = getKey();
   const model = getModel();
   
-  // Попробуем backend сначала
-  try{
-    const res = await fetch('/api/generate', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({...data, model, api_key: apiKey || undefined})
-    });
-    if(res.ok){
-      const j = await res.json();
-      return {html: j.html, model: j.model_used || model, source:'backend'};
-    }
-  }catch(e){ console.log('Backend not available, fallback to direct', e); }
+  // Попробуем backend сначала если на локальном сервере
+  if(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '8000'){
+    try{
+      const res = await fetch('/api/generate', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({...data, model, api_key: apiKey || undefined})
+      });
+      if(res.ok){
+        const j = await res.json();
+        return {html: j.html, model: j.model_used || model, source:'backend'};
+      }
+    }catch(e){ console.log('Backend not available, fallback to direct', e); }
+  }
 
   // Direct Polza API
   if(!apiKey){
@@ -837,7 +839,7 @@ async function callGenerateAPI(data){
 4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
 5. Форма заявки: рабочая имитация отправки с всплывающим окном благодарности.
 6. Мобильная адаптивность: 100% идеальный вид на смартфонах и планшетах.
-7. Верни ТОЛЬКО чистый HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
+7. Верни ТОЛЬКО чистый production-ready HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
@@ -850,15 +852,57 @@ async function callGenerateAPI(data){
   const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.85, max_tokens:16000})
+    body: JSON.stringify({
+      model,
+      messages:[{role:'system',content:system},{role:'user',content:user}],
+      temperature:0.75,
+      max_tokens:8192,
+      stream: true
+    })
   });
+
   if(!resp.ok){
     const err = await resp.text();
-    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,500)}`);
+    if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
+      throw new Error('На балансе Polza AI ключа закончились средства. Пополните баланс на https://polza.ai/dashboard');
+    }
+    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,300)}`);
   }
-  const j = await resp.json();
-  let html = j.choices[0].message.content;
-  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+
+  let fullText = '';
+  if(resp.body && resp.body.getReader){
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+
+    while(true){
+      const {done, value} = await reader.read();
+      if(done) break;
+      buffer += decoder.decode(value, {stream: true});
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for(const line of lines){
+        const trimmed = line.trim();
+        if(!trimmed || !trimmed.startsWith('data:')) continue;
+        const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
+        if(jsonStr === '[DONE]') break;
+        try{
+          const parsed = JSON.parse(jsonStr);
+          const delta = parsed.choices?.[0]?.delta?.content || '';
+          if(delta){
+            fullText += delta;
+            if(onProgress) onProgress(fullText);
+          }
+        }catch{}
+      }
+    }
+  } else {
+    const j = await resp.json();
+    fullText = j.choices[0].message.content;
+  }
+
+  let html = fullText.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
   return {html, model, source:'direct'};
 }
 
@@ -954,7 +998,7 @@ async function generateSite(){
   const data = getFormData();
   if(!data.prompt){
     toast('Опиши какой сайт нужен!', '⚠️');
-    document.getElementById('mainPrompt').focus();
+    document.getElementById('mainPrompt')?.focus();
     return;
   }
   if(isGenerating) return;
@@ -967,37 +1011,53 @@ async function generateSite(){
   const overlay = document.getElementById('loadingOverlay');
   overlay.classList.remove('hidden');
   overlay.classList.add('flex');
-  document.getElementById('previewPlaceholder').classList.add('hidden');
+  document.getElementById('previewPlaceholder')?.classList.add('hidden');
   if(window.innerWidth < 1024) {
     switchMobileTab('preview');
     window.scrollTo({top: 0, behavior: 'smooth'});
   }
-  
-  const steps = [
-    'Подключаюсь к Polza AI...',
-    'Claude Sonnet 4.5 думает над дизайном...',
-    'Пишу Tailwind + GSAP анимации...',
-    'Подбираю картинки с Unsplash...',
-    'Делаю адаптив и интерактив...',
-    'Финальные штрихи...'
-  ];
-  let step = 0;
-  const interval = setInterval(()=>{
-    if(step < steps.length){
-      document.getElementById('loadingStep').textContent = steps[step];
-      document.getElementById('loadingBar').style.width = `${15 + step*15}%`;
-      step++;
-    }
-  }, 800);
-  
+
+  const loadingStep = document.getElementById('loadingStep');
+  const loadingBar = document.getElementById('loadingBar');
+  loadingStep.textContent = '🔌 Подключение к Polza AI...';
+  loadingBar.style.width = '10%';
+
   const start = Date.now();
+  let receivedChars = 0;
+
+  // Непрерывный живой таймер и прогресс-бар (никогда не зависает на 90%)
+  const timerInterval = setInterval(()=>{
+    const elapsed = Math.floor((Date.now() - start)/1000);
+    btn.innerHTML = `⏳ ${elapsed}s...`;
+
+    if(receivedChars === 0){
+      if(elapsed < 4){
+        loadingStep.textContent = `🔌 Подключение к Polza AI (${elapsed}с)...`;
+        loadingBar.style.width = '15%';
+      } else if(elapsed < 10){
+        loadingStep.textContent = `🧠 Claude Sonnet 4.5 проектирует структуру сайта (${elapsed}с)...`;
+        loadingBar.style.width = '30%';
+      } else {
+        loadingStep.textContent = `🎨 Генерация стилей и компонентов сайта (${elapsed}с)...`;
+        loadingBar.style.width = `${Math.min(65, 30 + (elapsed-10)*2)}%`;
+      }
+    } else {
+      const kb = (receivedChars / 1024).toFixed(1);
+      loadingStep.textContent = `⚡ Нейросеть пишет код: ${kb} КБ (${elapsed}с)...`;
+      const pct = Math.min(95, Math.max(35, Math.round((receivedChars / 24000) * 95)));
+      loadingBar.style.width = `${pct}%`;
+    }
+  }, 400);
+
   try{
-    const result = await callGenerateAPI(data);
+    const result = await callGenerateAPI(data, (chunkText)=>{
+      receivedChars = chunkText.length;
+    });
     currentHtml = result.html;
     
-    clearInterval(interval);
-    document.getElementById('loadingBar').style.width = '100%';
-    document.getElementById('loadingStep').textContent = 'Готово! Рендерю...';
+    clearInterval(timerInterval);
+    loadingBar.style.width = '100%';
+    loadingStep.textContent = '✨ Готово! Рендерю сайт...';
     
     setTimeout(()=>{
       renderPreview(currentHtml);
@@ -1009,7 +1069,6 @@ async function generateSite(){
       document.getElementById('statSize').textContent = `${(currentHtml.length/1024).toFixed(1)} KB`;
       document.getElementById('statModel').textContent = result.model.split('/').pop();
       
-      // History
       history.unshift({name: data.site_name, prompt: data.prompt.slice(0,60), time: new Date().toLocaleTimeString(), size: currentHtml.length});
       history = history.slice(0,10);
       localStorage.setItem('neuralsite_history', JSON.stringify(history));
@@ -1017,13 +1076,13 @@ async function generateSite(){
       
       addChatMessage('assistant', `Готово! ✨ Сгенерировал сайт "${data.site_name}" за ${elapsed} сек на модели ${result.model}. Как тебе? Скажи что улучшить — я сразу исправлю.`);
       toast('Сайт сгенерирован! 🔥', '✦');
-    }, 600);
+    }, 400);
     
   }catch(e){
-    clearInterval(interval);
+    clearInterval(timerInterval);
     overlay.classList.add('hidden');
     overlay.classList.remove('flex');
-    document.getElementById('previewPlaceholder').classList.remove('hidden');
+    document.getElementById('previewPlaceholder')?.classList.remove('hidden');
     toast(e.message, '❌');
     addChatMessage('assistant', `Ошибка: ${e.message}. Проверь Polza API ключ и баланс на https://polza.ai/dashboard`);
   }finally{
