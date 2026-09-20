@@ -46,7 +46,7 @@ app = FastAPI(title="NeuraSite AI Generator", version="2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -288,6 +288,18 @@ async def call_polza_chat(messages: List[Dict], model: str, api_key: Optional[st
     
     raise HTTPException(status_code=500, detail=f"Все модели упали. Последняя ошибка: {last_error}")
 
+def extract_html(text: str) -> str:
+    """Достаёт из ответа модели чистый HTML-документ (обрезает пояснения/обёртки)."""
+    if not text:
+        return ""
+    text = text.strip()
+    # Полный документ от <!DOCTYPE ... до </html> или от <html ... до </html>
+    m = re.search(r'<!DOCTYPE[^>]*>.*?</html>', text, re.DOTALL | re.IGNORECASE)
+    if not m:
+        m = re.search(r'<html[^>]*>.*?</html>', text, re.DOTALL | re.IGNORECASE)
+    return m.group(0).strip() if m else text
+
+
 # ---------- Routes ----------
 @app.get("/health")
 async def health():
@@ -409,6 +421,84 @@ async def get_models():
         ]
     }
 
+class ProxyChatRequest(BaseModel):
+    model: str
+    messages: List[Dict[str, Any]]
+    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = 8000
+    api_key: Optional[str] = None
+
+
+@app.post("/api/proxy/chat")
+async def proxy_chat(req: ProxyChatRequest):
+    """CORS-safe прокси к Polza AI. Используется фронтендом, когда прямой запрос
+    из браузера к polza.ai блокируется (корпоративные сети, блокировки провайдера).
+    Перебирает каскад моделей как и фронтенд."""
+    if not req.messages:
+        raise HTTPException(status_code=400, detail="messages не может быть пустым")
+
+    candidate_models = [req.model] + [m for m in FALLBACK_MODELS if m != req.model]
+    last_error = None
+    seen = set()
+    for m in candidate_models:
+        if m in seen:
+            continue
+        seen.add(m)
+        try:
+            client = get_polza_client(req.api_key)
+            if not client:
+                raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен")
+            resp = await client.chat.completions.create(
+                model=m,
+                messages=req.messages,
+                temperature=req.temperature,
+                max_tokens=req.max_tokens,
+            )
+            content = resp.choices[0].message.content or ""
+            return {
+                "content": content,
+                "model": m,
+                "choices": [{"message": {"content": content}}],
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            last_error = str(e)
+
+    raise HTTPException(status_code=500, detail=f"Polza недоступен через прокси. Последняя ошибка: {last_error}")
+
+
+class ProxyImageRequest(BaseModel):
+    prompt: str
+    model: Optional[str] = "bytedance/seedream-4.5"
+    api_key: Optional[str] = None
+
+
+@app.post("/api/proxy/image")
+async def proxy_image(req: ProxyImageRequest):
+    """CORS-safe прокси генерации изображений через Polza AI."""
+    key = req.api_key or POLZA_API_KEY
+    if not key:
+        raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен")
+    client = get_polza_client(key)
+    try:
+        resp = await client.images.generate(
+            model=req.model,
+            prompt=req.prompt,
+            size="1024x1024",
+        )
+        data = getattr(resp, "data", None)
+        if data and len(data) > 0:
+            url = getattr(data[0], "url", None) or getattr(data[0], "b64_json", None)
+            if url:
+                return {"url": url, "model": req.model}
+        raise Exception(f"Пустой ответ изображения: {resp}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ошибка генерации изображения через прокси: {e}")
+
+
 @app.post("/api/generate")
 async def generate_site(req: GenerateRequest):
     model = req.model or DEFAULT_TEXT_MODEL
@@ -419,15 +509,8 @@ async def generate_site(req: GenerateRequest):
     ]
     
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.75, max_tokens=8192)
-        
-        # Проверка что это HTML
-        if "<!DOCTYPE" not in html and "<html" not in html:
-            # Попробуем извлечь HTML из текста
-            match = re.search(r'<!DOCTYPE.*</html>', html, re.DOTALL | re.IGNORECASE)
-            if match:
-                html = match.group(0)
-        
+        html = await call_polza_chat(messages, model, req.api_key, temperature=0.75, max_tokens=16000)
+        html = extract_html(html)
         return {"html": html, "model_used": model}
     except HTTPException:
         raise
@@ -437,20 +520,19 @@ async def generate_site(req: GenerateRequest):
 @app.post("/api/refine")
 async def refine_site(req: RefineRequest):
     model = req.model or "anthropic/claude-sonnet-4-5"  # для доработок быстрая модель
-    
-    # Ограничим размер HTML для контекста (если слишком большой - обрежем)
+
+    # НЕ обрезаем HTML: правки должны сохранять весь сайт целиком.
+    # Контекст 200k+ у рекомендуемых моделей позволяет передавать сайт как есть.
     html_to_send = req.current_html
-    if len(html_to_send) > 80000:
-        # Оставим начало и конец, вырежем середину с пометкой
-        html_to_send = html_to_send[:40000] + "\n\n<!-- ... СЕРЕДИНА САЙТА СОКРАЩЕНА ДЛЯ ЭКОНОМИИ КОНТЕКСТА, НО ТЫ ДОЛЖЕН СОХРАНИТЬ ЕЕ ... -->\n\n" + html_to_send[-40000:]
-    
+
     messages = [
         {"role": "system", "content": REFINE_PROMPT},
         {"role": "user", "content": f"Запрос на доработку: {req.message}\n\nТекущий HTML:\n{html_to_send}\n\nВерни ПОЛНЫЙ обновленный HTML."}
     ]
-    
+
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=8192)
+        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=16000)
+        html = extract_html(html)
         return {"html": html, "model_used": model}
     except HTTPException:
         raise
