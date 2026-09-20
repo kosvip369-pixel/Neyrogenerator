@@ -224,6 +224,8 @@ class ImageGenRequest(BaseModel):
     model: Optional[str] = None
     api_key: Optional[str] = None
     size: Optional[str] = "1024x1024"
+    image_base64: Optional[str] = None
+    mode: Optional[str] = "generate"
 
 class ImageSearchRequest(BaseModel):
     query: str
@@ -461,11 +463,65 @@ async def generate_image(req: ImageGenRequest):
     if not key:
         raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен")
     
-    model = req.model or "bytedance/seedream-4.5"
-    size = "1:1"  # Polza seedream requires 1:1, 16:9, etc.
-    
     try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=55.0) as client:
+            # 1. Если передан файл фото — режим редактирования (Image-to-Image / Нейро-Фотошоп)
+            if req.image_base64 or req.mode == "edit":
+                edit_model = req.model or "google/gemini-2.5-flash-image"
+                media_payload = {
+                    "model": edit_model,
+                    "input": {
+                        "prompt": req.prompt,
+                        "images": [{"type": "base64", "data": req.image_base64}],
+                        "aspect_ratio": "1:1"
+                    }
+                }
+                init_res = await client.post(
+                    "https://polza.ai/api/v1/media",
+                    headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                    json=media_payload
+                )
+                if not init_res.is_success:
+                    # Попробуем альтернативную модель Nano Banana 2
+                    if edit_model != "google/gemini-3.1-flash-image":
+                        media_payload["model"] = "google/gemini-3.1-flash-image"
+                        init_res = await client.post(
+                            "https://polza.ai/api/v1/media",
+                            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+                            json=media_payload
+                        )
+                if not init_res.is_success:
+                    raise Exception(f"Polza Media Error ({init_res.status_code}): {init_res.text}")
+                
+                init_data = init_res.json()
+                if "data" in init_data:
+                    d = init_data["data"]
+                    if isinstance(d, list) and d and d[0].get("url"):
+                        return {"url": d[0]["url"], "model": edit_model}
+                    elif isinstance(d, dict) and d.get("url"):
+                        return {"url": d["url"], "model": edit_model}
+                
+                req_id = init_data.get("id") or init_data.get("requestId")
+                if req_id:
+                    for _ in range(25):
+                        await asyncio.sleep(2.5)
+                        st_res = await client.get(
+                            f"https://polza.ai/api/v1/media/{req_id}",
+                            headers={"Authorization": f"Bearer {key}"}
+                        )
+                        if st_res.is_success:
+                            st_data = st_res.json()
+                            if st_data.get("status") == "completed":
+                                d = st_data.get("data", {})
+                                u = d.get("url") if isinstance(d, dict) else (d[0].get("url") if isinstance(d, list) and d else None)
+                                if u:
+                                    return {"url": u, "model": edit_model}
+                            elif st_data.get("status") in ("failed", "error"):
+                                raise Exception(f"Ошибка обработки: {st_data.get('error')}")
+
+            # 2. Обычная генерация с нуля (Text-to-Image)
+            model = req.model or "bytedance/seedream-4.5"
+            size = "1:1"
             init_res = await client.post(
                 "https://polza.ai/api/v1/images/generations",
                 headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -478,12 +534,10 @@ async def generate_image(req: ImageGenRequest):
             init_data = init_res.json()
             req_id = init_data.get("requestId") or init_data.get("id")
             if not req_id:
-                # Direct url fallback if any
                 if "data" in init_data and init_data["data"]:
                     return {"url": init_data["data"][0].get("url"), "model": model}
                 raise Exception(f"Не получен requestId: {init_data}")
             
-            # Poll status
             for _ in range(25):
                 await asyncio.sleep(2.0)
                 status_res = await client.get(

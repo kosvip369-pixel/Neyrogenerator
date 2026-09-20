@@ -269,9 +269,25 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           </div>
         </div>
 
+        <!-- Быстрые студийные фильтры в 1 клик -->
+        <div id="quickFiltersBar" class="hidden grid-cols-4 gap-1.5 pt-0.5">
+          <button type="button" onclick="applyQuickFilter('smooth')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
+            <span>🪄</span><span>Ретушь</span>
+          </button>
+          <button type="button" onclick="applyQuickFilter('studio')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
+            <span>💡</span><span>Свет</span>
+          </button>
+          <button type="button" onclick="applyQuickFilter('vignette')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
+            <span>✂️</span><span>Фокус</span>
+          </button>
+          <button type="button" onclick="applyQuickFilter('bw')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
+            <span>🎩</span><span>Ч/Б Нуар</span>
+          </button>
+        </div>
+
         <div class="flex gap-2">
           <div class="relative flex-1">
-            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Что изменить? (напр: замени фон на закат с подсветкой)">
+            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Что изменить? (напр: убери бороду, смени фон)">
             <button type="button" onclick="startVoiceInput('photoshopPrompt', 'voiceBtnPhotoshop')" id="voiceBtnPhotoshop" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[14px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать голосом">🎙️</button>
           </div>
           <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">
@@ -1974,23 +1990,313 @@ function handleUserPhotoSelected(e){
     const prevBox = document.getElementById('uploadedPreviewBox');
     prevBox.classList.remove('hidden');
     prevBox.classList.add('flex');
+    const filtersBar = document.getElementById('quickFiltersBar');
+    if(filtersBar){
+      filtersBar.classList.remove('hidden');
+      filtersBar.classList.add('grid');
+    }
     document.getElementById('uploadedThumb').src = uploadedBase64;
-    toast('Фото загружено! Опишите, что изменить', '📸');
+    toast('Фото загружено! Опишите задачу для ИИ или выберите фильтр', '📸');
   };
   reader.readAsDataURL(file);
 }
 
+// Умный построитель промпта для ИИ-редактирования с сохранением личности человека
+function enhancePhotoEditPrompt(promptText){
+  const p = (promptText || '').trim();
+  const lower = p.toLowerCase();
+  
+  let instructions = p;
+  if(lower.includes('бород') || lower.includes('побрей') || lower.includes('сбрей') || lower.includes('убери щетин')){
+    instructions = "Clean-shaven face. Completely remove beard, mustache, and all facial hair stubble. Render natural, smooth, realistic skin on the chin, jawline and cheeks with natural skin texture, matching the lighting and skin tone of the face.";
+  } else if(lower.includes('добавь бород') || lower.includes('сделай бород')){
+    instructions = "Add a neat, stylish, well-groomed beard and mustache that naturally fits the facial contour and hair color.";
+  } else if(lower.includes('улыбк') || lower.includes('улыбн')){
+    instructions = "Add a warm, friendly, natural smile showing clean white teeth.";
+  } else if(lower.includes('фон') || lower.includes('задний план')){
+    instructions = `Change the background: ${p}. Maintain perfect lighting integration on the foreground subject.`;
+  } else if(lower.includes('костюм') || lower.includes('одежд') || lower.includes('одень')){
+    instructions = `Change clothing to: ${p}. Photorealistic premium fabric texture.`;
+  } else if(lower.includes('омолод') || lower.includes('моложе') || lower.includes('морщин')){
+    instructions = "Make the person look younger, smoother skin, reduce wrinkles and bags under eyes while keeping authentic facial identity.";
+  }
+  
+  return `PHOTO EDITING & RETOUCHING: ${instructions}.
+CRITICAL IDENTITY PRESERVATION: Strictly preserve the exact same individual, identical facial structure, eyes, nose, head shape, hairstyle, lighting direction, camera perspective, and background from the input photo. High quality realistic photorealistic portrait retouching.`;
+}
+
+// Быстрые фильтры прямо в браузере (без ожидания API)
+function applyQuickFilter(type){
+  if(!uploadedBase64){
+    toast('Сначала загрузите фото выше 📷', '⚠️');
+    document.getElementById('userPhotoInput')?.click();
+    return;
+  }
+  
+  toast('Применяю студийный фильтр...', '✨');
+  const img = new Image();
+  img.onload = function(){
+    const canvas = document.createElement('canvas');
+    canvas.width = img.naturalWidth || img.width;
+    canvas.height = img.naturalHeight || img.height;
+    const ctx = canvas.getContext('2d');
+    
+    if(type === 'smooth'){
+      // Сглаживание и мягкий свет
+      ctx.drawImage(img, 0, 0);
+      ctx.globalAlpha = 0.35;
+      ctx.filter = 'blur(3px)';
+      ctx.drawImage(img, 0, 0);
+      ctx.globalAlpha = 1.0;
+      ctx.filter = 'contrast(106%) brightness(103%)';
+      ctx.drawImage(canvas, 0, 0);
+    } else if(type === 'studio'){
+      // Студийный свет и сочность
+      ctx.filter = 'contrast(115%) brightness(108%) saturate(115%)';
+      ctx.drawImage(img, 0, 0);
+    } else if(type === 'bw'){
+      // Премиум нуар
+      ctx.filter = 'grayscale(100%) contrast(125%) brightness(104%)';
+      ctx.drawImage(img, 0, 0);
+    } else if(type === 'vignette'){
+      // Портретный фокус с виньеткой
+      ctx.filter = 'contrast(112%) brightness(104%)';
+      ctx.drawImage(img, 0, 0);
+      const gradient = ctx.createRadialGradient(
+        canvas.width/2, canvas.height/2, canvas.width*0.28,
+        canvas.width/2, canvas.height/2, canvas.width*0.72
+      );
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0.55)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+    
+    const editedUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const cont = document.getElementById('imageResults');
+    cont.classList.remove('hidden');
+    cont.insertAdjacentHTML('afterbegin', `
+      <div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/40 bg-[#0F1320] p-3 space-y-2 group shadow-xl">
+        <div class="flex items-center justify-between text-[11px] text-white/70">
+          <span class="font-bold text-[#6C5CFF] flex items-center gap-1">✨ Быстрая студийная ретушь (${type})</span>
+          <span class="text-white/40 font-mono">готово за 0.1с</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10">
+            <span class="absolute top-1.5 left-1.5 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-white/70 font-mono">До</span>
+            <img src="${uploadedBase64}" class="w-full h-full object-cover">
+          </div>
+          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#6C5CFF]/40">
+            <span class="absolute top-1.5 left-1.5 text-[9px] bg-[#6C5CFF]/90 px-1.5 py-0.5 rounded text-white font-bold font-mono">После</span>
+            <img src="${editedUrl}" class="w-full h-full object-cover">
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button onclick="insertImage('${editedUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
+            <span>✦</span> Вставить в сайт
+          </button>
+          <a href="${editedUrl}" download="retouched-photo.jpg" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
+            💾 Скачать
+          </a>
+        </div>
+      </div>
+    `);
+    toast('Фильтр применен! ✨', '✅');
+  };
+  img.src = uploadedBase64;
+}
+
+// Настоящий ИИ Нейро-Фотошоп (Image-to-Image / Inpainting)
 async function applyAiPhotoshop(){
   const editPrompt = (document.getElementById('photoshopPrompt')?.value || '').trim();
-  if(!uploadedBase64 && !editPrompt){
-    return toast('Загрузите фото или опишите задачу для ИИ', '⚠️');
+  if(!uploadedBase64){
+    toast('Сначала загрузите фотографию выше 📷', '⚠️');
+    document.getElementById('userPhotoInput')?.click();
+    return;
+  }
+  if(!editPrompt){
+    toast('Опишите, что изменить на фото (например: убери бороду, смени фон) ✏️', '⚠️');
+    document.getElementById('photoshopPrompt')?.focus();
+    return;
   }
 
-  const promptText = editPrompt || 'Премиальное качественное фото в современном стиле, профессиональный свет';
-  document.getElementById('imagePrompt').value = promptText;
-  
-  toast('Нейро-Фотошоп обрабатывает фото (~15-20 сек)... 🪄', '🎨');
-  await generateImage();
+  const apiKey = getKey();
+  if(!apiKey){
+    toast('Нужен Polza API ключ для ИИ', '⚠️');
+    openOwnerModal();
+    return;
+  }
+
+  const btn = document.getElementById('aiPhotoshopBtn');
+  if(btn){
+    btn.disabled = true;
+    btn.innerHTML = '⏳ 0s';
+  }
+
+  toast('Нейро-Фотошоп редактирует ваше фото... 🪄', '🎨');
+
+  const startTime = Date.now();
+  const timerInterval = setInterval(()=>{
+    const s = Math.floor((Date.now() - startTime)/1000);
+    if(btn) btn.innerHTML = `⏳ ${s}s`;
+  }, 1000);
+
+  const cont = document.getElementById('imageResults');
+  cont.classList.remove('hidden');
+  const placeholderId = 'loading_edit_' + Date.now();
+  cont.insertAdjacentHTML('afterbegin', `
+    <div id="${placeholderId}" class="col-span-3 rounded-xl p-4 bg-white/5 border border-[#FF4D8D]/40 text-center flex flex-col items-center justify-center gap-2">
+      <div class="flex items-center gap-3">
+        <img src="${uploadedBase64}" class="w-10 h-10 rounded-lg object-cover border border-white/20">
+        <div class="w-5 h-5 border-2 border-[#FF4D8D] border-t-transparent rounded-full animate-spin"></div>
+      </div>
+      <div class="text-[12px] text-white/90 font-medium">Нейро-Фотошоп: "${editPrompt.slice(0,35)}..."</div>
+      <div class="text-[11px] text-white/50">ИИ перерисовывает ваше фото с сохранением лица (~15-30 сек)</div>
+    </div>
+  `);
+
+  try{
+    const fullPrompt = enhancePhotoEditPrompt(editPrompt);
+    let imageUrl = null;
+
+    // 1. Попробуем бэкенд /api/generate-image с image_base64
+    try{
+      const res = await fetch('/api/generate-image', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          prompt: fullPrompt,
+          image_base64: uploadedBase64,
+          mode: 'edit',
+          model: 'google/gemini-2.5-flash-image',
+          api_key: apiKey
+        })
+      });
+      if(res.ok){
+        const j = await res.json();
+        if(j.url && !j.fallback) imageUrl = j.url;
+      }
+    }catch(err){ console.log('Backend edit fallback to direct', err); }
+
+    // 2. Если на GitHub Pages (прямой вызов Polza Media API)
+    if(!imageUrl){
+      const editModels = ['google/gemini-2.5-flash-image', 'google/gemini-3.1-flash-image'];
+      let lastError = null;
+
+      for(const m of editModels){
+        try{
+          const initRes = await fetch('https://polza.ai/api/v1/media', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${apiKey}`
+            },
+            body: JSON.stringify({
+              model: m,
+              input: {
+                prompt: fullPrompt,
+                images: [{
+                  type: 'base64',
+                  data: uploadedBase64
+                }],
+                aspect_ratio: '1:1'
+              }
+            })
+          });
+
+          if(!initRes.ok){
+            const errData = await initRes.text();
+            lastError = errData;
+            continue;
+          }
+
+          const initData = await initRes.json();
+          if(initData.data && Array.isArray(initData.data) && initData.data[0]?.url){
+            imageUrl = initData.data[0].url;
+            break;
+          } else if(initData.data?.url){
+            imageUrl = initData.data.url;
+            break;
+          }
+
+          const mediaId = initData.id || initData.requestId;
+          if(mediaId){
+            for(let i=0; i<30; i++){
+              await new Promise(r => setTimeout(r, 2500));
+              const checkRes = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
+                headers: {'Authorization': `Bearer ${apiKey}`}
+              });
+              if(checkRes.ok){
+                const stData = await checkRes.json();
+                if(stData.status === 'completed'){
+                  imageUrl = stData.data?.url || (Array.isArray(stData.data) ? stData.data[0]?.url : null);
+                  break;
+                } else if(stData.status === 'failed' || stData.status === 'error'){
+                  throw new Error(stData.error?.message || 'Обработка отклонена');
+                }
+              }
+            }
+          }
+
+          if(imageUrl) break;
+        }catch(mErr){
+          console.warn(`Model ${m} failed:`, mErr);
+          lastError = mErr.message;
+        }
+      }
+
+      if(!imageUrl && lastError){
+        if(lastError.includes('INSUFFICIENT_BALANCE') || lastError.includes('Недостаточно средств')){
+          throw new Error('На ключе Polza AI не хватает баланса для нейросети. Пополните баланс на polza.ai или используйте кнопки быстрой ретуши выше.');
+        }
+        throw new Error('Ошибка ИИ-обработки: ' + lastError.slice(0, 150));
+      }
+    }
+
+    clearInterval(timerInterval);
+    document.getElementById(placeholderId)?.remove();
+    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
+
+    if(!imageUrl){
+      throw new Error('Время ожидания фото истекло. Попробуйте еще раз или используйте кнопки быстрой ретуши.');
+    }
+
+    // Отображаем результат с карточкой До / После
+    cont.insertAdjacentHTML('afterbegin', `
+      <div class="col-span-3 rounded-xl overflow-hidden border border-[#FF4D8D]/40 bg-[#0F1320] p-3 space-y-2 group shadow-xl">
+        <div class="flex items-center justify-between text-[11px] text-white/70">
+          <span class="font-bold text-[#FF4D8D] flex items-center gap-1">🪄 Отредактировано ИИ</span>
+          <span class="text-white/40 truncate max-w-[150px]">${editPrompt}</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10">
+            <span class="absolute top-1.5 left-1.5 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-white/70 font-mono">До</span>
+            <img src="${uploadedBase64}" class="w-full h-full object-cover">
+          </div>
+          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#00D492]/40">
+            <span class="absolute top-1.5 left-1.5 text-[9px] bg-[#00D492]/90 px-1.5 py-0.5 rounded text-black font-bold font-mono">После</span>
+            <img src="${imageUrl}" class="w-full h-full object-cover">
+          </div>
+        </div>
+        <div class="flex gap-2 pt-1">
+          <button onclick="insertImage('${imageUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
+            <span>✦</span> Вставить в сайт
+          </button>
+          <a href="${imageUrl}" target="_blank" download="edited-photo.png" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
+            Открыть ↗
+          </a>
+        </div>
+      </div>
+    `);
+
+    toast('Фото успешно отредактировано! 🪄', '✅');
+  }catch(e){
+    clearInterval(timerInterval);
+    document.getElementById(placeholderId)?.remove();
+    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
+    toast(e.message, '❌');
+    console.error('AI Photoshop Error:', e);
+  }
 }
 
 // ---------- Chat Credits Counter ----------
