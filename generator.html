@@ -795,25 +795,40 @@ async function callGenerateAPI(data){
    - Анимируй появление блоков (fade up, stagger эффект при скролле).
    - Добавь интерактивные микро-анимации на наведение: hover:scale-105, hover:shadow-2xl, подсветка кнопок, плавные градиенты.
 
-3. АВТО-МНОГОСТРАНИЧНОСТЬ (SPA-АРХИТЕКТУРА):
-   - Если в запросе упомянуты страницы, разделы, каталог, цены или выбран multipage: ОБЯЗАТЕЛЬНО сделай многостраничный сайт внутри одного файла!
-   - Разделы: <section id="page-home" class="page-view">, <section id="page-catalog" class="page-view hidden">, <section id="page-about" class="page-view hidden">, <section id="page-reviews" class="page-view hidden">, <section id="page-contacts" class="page-view hidden">.
-   - В шапке и мобильном меню функция window.showPage(pageId) переключает страницы плавно, скроллит вверх и обновляет активную кнопку меню.
-   - Мобильный гамбургер и все переходы обязаны работать на 100%!
+3. СТРОГОЕ ТРЕБОВАНИЕ К МНОГОСТРАНИЧНОСТИ (ЕСЛИ ВЫБРАН МНОГОСТРАНИЧНЫЙ ТИП ИЛИ ЕСТЬ ЗАПРОС НА СТРАНИЦЫ):
+   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО делать обычный одностраничный скролл-лендинг, если тип 'multipage' или пользователь попросил страницы!
+   - ОБЯЗАТЕЛЬНО создай полноценную систему переключения страниц внутри одного файла (SPA):
+     1. <section id="page-home" class="page-view active min-h-screen"> — Главная страница с ярким Hero, краткими анонсами услуг, преимуществами и призывом.
+     2. <section id="page-catalog" class="page-view hidden min-h-screen"> — Отдельная страница: детальный Каталог/Услуги с фильтрами, карточками, ценами и кнопками заказа.
+     3. <section id="page-about" class="page-view hidden min-h-screen"> — Отдельная страница: О компании, история, миссия, команда с фото и регалиями.
+     4. <section id="page-reviews" class="page-view hidden min-h-screen"> — Отдельная страница: Отзывы клиентов, кейсы, сертификаты и оценки.
+     5. <section id="page-contacts" class="page-view hidden min-h-screen"> — Отдельная страница: Контакты, интерактивная карта-макет, реквизиты, форма обратной связи.
+   - В шапке (header) и мобильном меню (mobileMenu) ВСЕ ссылки меню (Главная, Каталог/Услуги, О нас, Отзывы, Контакты) ОБЯЗАНЫ иметь вид:
+     <a href="javascript:void(0)" onclick="showPage('catalog')" class="nav-link cursor-pointer hover:text-[#6C5CFF] transition">Каталог</a>
+   - Внизу файла ДОЛЖНА БЫТЬ ЖЕЛЕЗНО РАБОЧАЯ функция showPage:
+     window.showPage = function(pageId) {
+       document.querySelectorAll('.page-view').forEach(function(el){ el.classList.add('hidden'); });
+       const target = document.getElementById('page-' + pageId);
+       if(target) { target.classList.remove('hidden'); }
+       window.scrollTo({top: 0, behavior: 'smooth'});
+       const mob = document.getElementById('mobileMenu');
+       if(mob) mob.classList.add('hidden');
+     };
+   - Пользователь при нажатии на пункты меню ДОЛЖЕН ВИДЕТЬ РЕАЛЬНУЮ СМЕНУ СТРАНИЦ!
 
 4. ТЕКСТ И СТРУКТУРА:
    - Мощный Hero-заголовок, подзаголовок, УТП, счетчики достижений, сетка карточек с ценностью, интерактивный блок с фильтрами/калькулятором, стильные отзывы с аватарами, форма заявки с модальным окном успеха.
    - Стили: Tailwind CSS, шрифты Google Fonts (Inter/Outfit/Manrope).
    - Верни ТОЛЬКО чистый код HTML, начиная строго с <!DOCTYPE html>, без пояснений и без markdown.`;
 
-  // Автоопределение многостраничности из текста запроса пользователя
+  // Автоматический выбор лучшей нейросети для веб-разработки (никаких слабых моделей)
   const promptLower = (data.prompt || '').toLowerCase();
   const isMulti = promptLower.includes('многостранич') || promptLower.includes('несколько страниц') || promptLower.includes('раздел') || promptLower.includes('каталог') || data.site_type === 'multipage';
   if(isMulti) {
     data.site_type = 'multipage';
   }
-  // Для сложных и многостраничных проектов автоматически выбираем мощнейшую модель для фронтенда
-  const activeModel = isMulti ? 'anthropic/claude-sonnet-4-5' : (model || 'anthropic/claude-sonnet-4-5');
+  // ВСЕГДА используем Claude Sonnet 4.5 — топовую нейросеть для фронтенда, анимаций и сложного кода
+  const activeModel = 'anthropic/claude-sonnet-4-5';
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
