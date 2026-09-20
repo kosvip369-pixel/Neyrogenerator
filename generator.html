@@ -223,6 +223,16 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       </div>
     </div>
 
+    <!-- Скорость генерации (Турбо 20с vs PRO Claude 40с) -->
+    <div class="grid grid-cols-2 gap-2">
+      <button type="button" onclick="setSpeedMode('turbo')" id="speedTurboBtn" class="py-2.5 px-3 rounded-xl border border-[#00D492] bg-[#00D492]/20 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95">
+        <span>⚡</span> <span>Турбо (~20 сек)</span>
+      </button>
+      <button type="button" onclick="setSpeedMode('pro')" id="speedProBtn" class="py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95">
+        <span>👑</span> <span>PRO Claude (~40 сек)</span>
+      </button>
+    </div>
+
     <!-- Generate Button -->
     <button id="generateBtn" onclick="generateSite()" class="w-full btn-primary py-4 rounded-[16px] font-bold text-[15px] text-white flex items-center justify-center gap-2 shimmer">
       <span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>
@@ -382,10 +392,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         </div>
         <div class="font-space font-bold text-[16px] mb-2" id="loadingTitle">Генерирую магию...</div>
         <div class="text-[13px] text-white/50 text-center max-w-[320px]" id="loadingText">Claude Sonnet 4.5 пишет код, подбирает картинки, делает анимации</div>
-        <div class="mt-6 w-[280px] h-1 rounded-full bg-white/10 overflow-hidden">
-          <div id="loadingBar" class="h-full bg-gradient-to-r from-[#6C5CFF] to-[#00D9FF] transition-all duration-500" style="width: 10%"></div>
+        <div class="mt-6 w-[280px] h-2 rounded-full bg-white/10 overflow-hidden border border-white/10">
+          <div id="loadingBar" class="h-full bg-gradient-to-r from-[#6C5CFF] via-[#00D492] to-[#00D9FF] transition-all duration-300" style="width: 15%"></div>
         </div>
-        <div class="mt-3 text-[11px] font-mono text-white/30" id="loadingStep">Инициализация Polza AI...</div>
+        <div class="mt-3 text-[13px] font-mono font-bold text-white/90 text-center" id="loadingStep">🔌 Подключение к Polza AI...</div>
+        <button type="button" onclick="cancelGeneration()" class="mt-4 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white/50 hover:text-white transition">✕ Отменить</button>
       </div>
     </div>
 
@@ -701,9 +712,52 @@ function getKey(){
   const hardcoded = 'pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4';
   return (document.getElementById('polzaKey')?.value || document.getElementById('polzaKeyMobile')?.value || document.getElementById('keyModalInput')?.value || '').trim() || localStorage.getItem('polza_key') || hardcoded;
 }
-function getModel(){
-  return document.getElementById('modelSelect')?.value || document.getElementById('modelSelectMobile')?.value || 'anthropic/claude-sonnet-4-5';
+let currentSpeedMode = localStorage.getItem('site_speed_mode') || 'turbo';
+let currentAbortController = null;
+
+function setSpeedMode(mode){
+  currentSpeedMode = mode;
+  localStorage.setItem('site_speed_mode', mode);
+  const tBtn = document.getElementById('speedTurboBtn');
+  const pBtn = document.getElementById('speedProBtn');
+  const lText = document.getElementById('loadingText');
+  if(!tBtn || !pBtn) return;
+  if(mode === 'turbo'){
+    tBtn.className = 'py-2.5 px-3 rounded-xl border border-[#00D492] bg-[#00D492]/20 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
+    pBtn.className = 'py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95';
+    if(lText) lText.textContent = 'Google Gemini 2.5 Flash пишет чистый код и собирает сайт за 15-20 сек';
+  } else {
+    pBtn.className = 'py-2.5 px-3 rounded-xl border border-[#6C5CFF] bg-[#6C5CFF]/25 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
+    tBtn.className = 'py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95';
+    if(lText) lText.textContent = 'Claude Sonnet 4.5 пишет код, подбирает картинки, делает анимации';
+  }
 }
+
+function cancelGeneration(){
+  if(currentAbortController){
+    currentAbortController.abort();
+    currentAbortController = null;
+  }
+  isGenerating = false;
+  const overlay = document.getElementById('loadingOverlay');
+  if(overlay){
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+  }
+  document.getElementById('previewPlaceholder')?.classList.remove('hidden');
+  const btn = document.getElementById('generateBtn');
+  if(btn){
+    btn.disabled = false;
+    btn.innerHTML = '<span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>';
+  }
+  toast('Генерация отменена', '⏹');
+}
+
+function getModel(){
+  if(currentSpeedMode === 'turbo') return 'google/gemini-2.5-flash';
+  return 'anthropic/claude-sonnet-4-5';
+}
+
 function toast(text, icon='✦'){
   const t = document.getElementById('toast');
   document.getElementById('toastText').textContent = text;
@@ -2374,6 +2428,7 @@ function updateChatCreditsUI(){
   }
 }
 setTimeout(updateChatCreditsUI, 300);
+setTimeout(()=>setSpeedMode(currentSpeedMode), 100);
 
 // Wrap sendChat with credit checks
 const baseSendChat = sendChat;
