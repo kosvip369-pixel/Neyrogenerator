@@ -919,11 +919,83 @@ ${currentHtml}
   return cleanHtmlCode(rawHtml);
 }
 
+// Курированная библиотека 100% реальных и красивых фото Unsplash по категориям
+const CURATED_NICHE_IMAGES = {
+  construction: [
+    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1541888946425-d0fbb18615f7?w=800&auto=format&fit=crop&q=80'
+  ],
+  auto: [
+    'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=800&auto=format&fit=crop&q=80'
+  ],
+  restaurant: [
+    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80'
+  ],
+  beauty: [
+    'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1582095133179-bfd08e2fc6b3?w=800&auto=format&fit=crop&q=80'
+  ],
+  medical: [
+    'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80'
+  ],
+  tech: [
+    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop&q=80',
+    'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80'
+  ]
+};
+
+// Функция гарантированного наполнения сайта рабочими картинками
+function enrichHtmlImages(html){
+  if(!html) return '';
+  const textLower = html.toLowerCase();
+  let pool = CURATED_NICHE_IMAGES.tech;
+  if(textLower.includes('строит') || textLower.includes('дом') || textLower.includes('ремонт') || textLower.includes('недвиж')) pool = CURATED_NICHE_IMAGES.construction;
+  else if(textLower.includes('авто') || textLower.includes('машин') || textLower.includes('сервис') || textLower.includes('шиномонтаж')) pool = CURATED_NICHE_IMAGES.auto;
+  else if(textLower.includes('ресторан') || textLower.includes('кафе') || textLower.includes('ед') || textLower.includes('пицц') || textLower.includes('бургер')) pool = CURATED_NICHE_IMAGES.restaurant;
+  else if(textLower.includes('красот') || textLower.includes('салон') || textLower.includes('барбер') || textLower.includes('ногт') || textLower.includes('волос')) pool = CURATED_NICHE_IMAGES.beauty;
+  else if(textLower.includes('клиник') || textLower.includes('врач') || textLower.includes('стоматолог') || textLower.includes('медицин')) pool = CURATED_NICHE_IMAGES.medical;
+
+  let imgIdx = 0;
+  // Заменяем битые или выдуманные фото-плейсхолдеры на 100% реальные фото
+  let res = html.replace(/src=["'](https?:\/\/[^"']*(?:via\.placeholder|placeholder|photo-xxx|example|source\.unsplash|images\.unsplash\.com\/photo-[a-z0-9_-]{0,10}\?|unsplash\.com\/photos\/[^"']*)[^"']*)["']/gi, function(match){
+    const picked = pool[imgIdx % pool.length];
+    imgIdx++;
+    return `src="${picked}"`;
+  });
+
+  // Добавляем автоматический fallback на каждый img тег
+  res = res.replace(/<img\b([^>]*?)>/gi, function(match, attributes){
+    if(attributes.includes('onerror')) return match;
+    const fallback = pool[0];
+    return `<img ${attributes} onerror="this.onerror=null;this.src='${fallback}';">`;
+  });
+
+  return res;
+}
+
 function cleanHtmlCode(raw){
   if(!raw) return '';
-  const match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
-  if(match) return match[0].trim();
-  return raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+  let match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
+  let cleaned = match ? match[0].trim() : raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
+  return enrichHtmlImages(cleaned);
 }
 
 // ---------- Generate ----------
