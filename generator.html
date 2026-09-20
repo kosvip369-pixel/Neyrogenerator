@@ -857,37 +857,14 @@ function getFormData(){
 }
 
 // ---------- Backend vs Direct ----------
-async function callGenerateAPI(data, onProgress){
-  const apiKey = getKey();
-  const model = getModel();
-  
-  // Попробуем backend сначала если на локальном сервере
-  if(window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.port === '8000'){
-    try{
-      const res = await fetch('/api/generate', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({...data, model, api_key: apiKey || undefined})
-      });
-      if(res.ok){
-        const j = await res.json();
-        return {html: j.html, model: j.model_used || model, source:'backend'};
-      }
-    }catch(e){ console.log('Backend not available, fallback to direct', e); }
-  }
-
-  // Direct Polza API
-  if(!apiKey){
-    throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
-  }
-  
+function buildDirectPrompts(data){
   const system = `Ты — элитный веб-разработчик и дизайнер уровня Apple, Stripe, Linear.
 Твоя задача: сгенерировать ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
 ТРЕБОВАНИЯ:
 1. Используй Tailwind CSS CDN, Google Fonts, Lucide Icons или Font Awesome, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
 2. Картинки: реальные качественные фото с https://images.unsplash.com по теме ниши.
 3. ВАЖНО ПО ТИПУ САЙТА:
-   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные). Сделай так, чтобы пользователь кликал по меню и видел смену страниц, как на полноценном многостраничном портале!
+   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные).
    - Если тип 'landing': сделай длинный продающий одностраничник с плавным якорным скроллом.
    - Если тип 'ecommerce': подробный каталог карточек с ценами, фильтрацией, корзиной/модалкой заказа.
 4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
@@ -903,66 +880,216 @@ async function callGenerateAPI(data, onProgress){
 Описание: ${data.prompt}
 СГЕНЕРИРУЙ ПОЛНЫЙ HTML СЕЙЧАС.`;
 
-  const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({
-      model,
-      messages:[{role:'system',content:system},{role:'user',content:user}],
-      temperature:0.75,
-      max_tokens:8192,
-      stream: true
-    })
-  });
+  return {system, user};
+}
 
-  if(!resp.ok){
-    const err = await resp.text();
-    if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
-      throw new Error('На балансе Polza AI ключа закончились средства. Пополните баланс на https://polza.ai/dashboard');
+// Есть ли у нас собственный бэкенд (FastAPI), а не статический хостинг?
+let backendAvailable = null;
+async function hasBackend(){
+  if(backendAvailable !== null) return backendAvailable;
+  try{
+    const ctrl = new AbortController();
+    const t = setTimeout(()=>ctrl.abort(), 4000);
+    const res = await fetch('/health', {signal: ctrl.signal});
+    clearTimeout(t);
+    if(res.ok){
+      const j = await res.json().catch(()=>null);
+      backendAvailable = !!(j && j.status === 'ok');
+    } else {
+      backendAvailable = false;
     }
-    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,300)}`);
+  }catch(e){
+    backendAvailable = false;
   }
+  return backendAvailable;
+}
 
-  let fullText = '';
-  if(resp.body && resp.body.getReader){
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder('utf-8');
-    let buffer = '';
-
-    let streamFinished = false;
-    while(!streamFinished){
+// Общий парсер SSE-потока: вызывает onEvent(objectOrText) на каждое событие data:
+async function readSSE(resp, onEvent, signalTimeoutReset){
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder('utf-8');
+  let buffer = '';
+  try{
+    while(true){
       const {done, value} = await reader.read();
       if(done) break;
+      if(signalTimeoutReset) signalTimeoutReset();
       buffer += decoder.decode(value, {stream: true});
-      const lines = buffer.split('\n');
-      buffer = lines.pop();
-
-      for(const line of lines){
-        const trimmed = line.trim();
-        if(!trimmed || !trimmed.startsWith('data:')) continue;
-        const jsonStr = trimmed.replace(/^data:\s*/, '').trim();
-        if(jsonStr === '[DONE]'){
-          streamFinished = true;
-          try{ reader.cancel(); }catch(e){}
-          break;
-        }
-        try{
-          const parsed = JSON.parse(jsonStr);
-          const delta = parsed.choices?.[0]?.delta?.content || '';
-          if(delta){
-            fullText += delta;
-            if(onProgress) onProgress(fullText);
-          }
-        }catch{}
+      const parts = buffer.split('\n');
+      buffer = parts.pop();
+      for(const raw of parts){
+        const line = raw.trim();
+        if(!line || !line.startsWith('data:')) continue;
+        const payload = line.slice(5).trim();
+        if(!payload) continue;
+        if(payload === '[DONE]'){ try{ await reader.cancel(); }catch(e){} return; }
+        let parsed = null;
+        try{ parsed = JSON.parse(payload); }catch(e){ continue; }
+        const stop = onEvent(parsed);
+        if(stop === true){ try{ await reader.cancel(); }catch(e){} return; }
       }
     }
-  } else {
-    const j = await resp.json();
-    fullText = j.choices[0].message.content;
+  } finally {
+    try{ reader.releaseLock(); }catch(e){}
+  }
+}
+
+async function generateViaBackend(data, model, apiKey, onProgress){
+  const ctrl = new AbortController();
+  // Watchdog: рвём соединение, только если ДАННЫЕ не идут 90 секунд подряд.
+  let lastActivity = Date.now();
+  const touch = ()=>{ lastActivity = Date.now(); };
+  const watchdog = setInterval(()=>{
+    if(Date.now() - lastActivity > 90000){
+      clearInterval(watchdog);
+      ctrl.abort();
+    }
+  }, 2000);
+
+  try{
+    const res = await fetch('/api/generate-stream', {
+      method:'POST',
+      headers:{'Content-Type':'application/json', 'Accept':'text/event-stream'},
+      body: JSON.stringify({...data, model, api_key: apiKey || undefined}),
+      signal: ctrl.signal
+    });
+
+    if(!res.ok || !res.body || !res.body.getReader){
+      // Бэкенд есть, но стрим не поддержан — обычный JSON-запрос
+      const plain = await fetch('/api/generate', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({...data, model, api_key: apiKey || undefined})
+      });
+      if(!plain.ok){
+        const t = await plain.text();
+        throw new Error(`Сервер вернул ${plain.status}: ${t.slice(0,250)}`);
+      }
+      const j = await plain.json();
+      return {html: j.html, model: j.model_used || model, source:'backend'};
+    }
+
+    let full = '';
+    let finalHtml = null;
+    let usedModel = model;
+    let serverError = null;
+
+    await readSSE(res, (ev)=>{
+      if(ev.type === 'delta' && ev.text){
+        full += ev.text;
+        if(onProgress) onProgress(full);
+      } else if(ev.type === 'done'){
+        finalHtml = ev.html;
+        usedModel = ev.model_used || model;
+        return true;
+      } else if(ev.type === 'error'){
+        serverError = ev.error || 'Неизвестная ошибка сервера';
+        return true;
+      }
+    }, touch);
+
+    if(serverError) throw new Error(serverError);
+    const html = finalHtml || cleanHtmlCode(full);
+    if(!html) throw new Error('Сервер не вернул HTML. Попробуйте ещё раз.');
+    return {html, model: usedModel, source:'backend'};
+  } finally {
+    clearInterval(watchdog);
+  }
+}
+
+async function generateDirect(data, model, apiKey, onProgress){
+  if(!apiKey){
+    throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
+  }
+  const {system, user} = buildDirectPrompts(data);
+
+  const ctrl = new AbortController();
+  let lastActivity = Date.now();
+  const touch = ()=>{ lastActivity = Date.now(); };
+  const watchdog = setInterval(()=>{
+    if(Date.now() - lastActivity > 90000){
+      clearInterval(watchdog);
+      ctrl.abort();
+    }
+  }, 2000);
+
+  try{
+    const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+      body: JSON.stringify({
+        model,
+        messages:[{role:'system',content:system},{role:'user',content:user}],
+        temperature:0.75,
+        max_tokens:16000,
+        stream: true
+      }),
+      signal: ctrl.signal
+    });
+
+    if(!resp.ok){
+      const err = await resp.text();
+      if(resp.status === 401 || resp.status === 403){
+        throw new Error('Polza API отклонил ключ (401/403). Проверьте ключ в шапке сайта.');
+      }
+      if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
+        throw new Error('На балансе Polza AI ключа закончились средства. Пополните баланс на https://polza.ai/dashboard');
+      }
+      throw new Error(`Polza API error ${resp.status}: ${err.slice(0,300)}`);
+    }
+
+    let fullText = '';
+    if(resp.body && resp.body.getReader){
+      await readSSE(resp, (parsed)=>{
+        const delta = (parsed.choices && parsed.choices[0] && parsed.choices[0].delta && parsed.choices[0].delta.content) || '';
+        if(delta){
+          fullText += delta;
+          if(onProgress) onProgress(fullText);
+        }
+        const finish = parsed.choices && parsed.choices[0] && parsed.choices[0].finish_reason;
+        if(finish) return true;
+      }, touch);
+    } else {
+      const j = await resp.json();
+      fullText = j.choices[0].message.content;
+    }
+
+    const html = cleanHtmlCode(fullText);
+    if(!html) throw new Error('Модель вернула пустой ответ. Попробуйте ещё раз или смените модель.');
+    return {html, model, source:'direct'};
+  } finally {
+    clearInterval(watchdog);
+  }
+}
+
+// ---------- Backend vs Direct ----------
+async function callGenerateAPI(data, onProgress){
+  const apiKey = getKey();
+  const model = getModel();
+
+  // 1) Если наш FastAPI-бэкенд поднят (на любом домене, не только localhost) — идём через него.
+  if(await hasBackend()){
+    try{
+      return await generateViaBackend(data, model, apiKey, onProgress);
+    }catch(e){
+      console.warn('Backend generation failed, fallback to direct Polza API:', e);
+      if(!apiKey) throw e;
+      if(onProgress) onProgress('');
+    }
   }
 
-  let html = fullText.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  return {html, model, source:'direct'};
+  // 2) Прямой вызов Polza AI из браузера.
+  try{
+    return await generateDirect(data, model, apiKey, onProgress);
+  }catch(e){
+    if(e && e.name === 'AbortError'){
+      throw new Error('Ответ от Polza AI не приходил 90 секунд — соединение разорвано. Попробуйте ещё раз или выберите более быструю модель.');
+    }
+    if(e instanceof TypeError){
+      throw new Error('Не удалось подключиться к Polza AI (сеть/CORS). Проверьте интернет и ключ.');
+    }
+    throw e;
+  }
 }
 
 async function callRefineAPI(currentHtml, message){
@@ -970,17 +1097,20 @@ async function callRefineAPI(currentHtml, message){
   // Always use high-intelligence Sonnet 4.5 for code refactoring
   const model = 'anthropic/claude-sonnet-4-5';
   
-  try{
-    const res = await fetch('/api/refine', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({current_html: currentHtml, message, model, api_key: apiKey || undefined})
-    });
-    if(res.ok){
-      const j = await res.json();
-      return cleanHtmlCode(j.html);
-    }
-  }catch(e){ console.log('Backend refine fallback to direct', e); }
+  if(await hasBackend()){
+    try{
+      const res = await fetch('/api/refine', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({current_html: currentHtml, message, model, api_key: apiKey || undefined})
+      });
+      if(res.ok){
+        const j = await res.json();
+        const cleaned = cleanHtmlCode(j.html);
+        if(cleaned) return cleaned;
+      }
+    }catch(e){ console.log('Backend refine fallback to direct', e); }
+  }
 
   if(!apiKey) throw new Error('Укажите Polza API ключ');
   

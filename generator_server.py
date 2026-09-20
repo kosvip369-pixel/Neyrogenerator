@@ -18,7 +18,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import httpx
@@ -52,11 +52,19 @@ app.add_middleware(
 )
 
 # ---------- Polza Client ----------
+REQUEST_TIMEOUT = float(os.environ.get("POLZA_TIMEOUT", 300))
+
+
 def get_polza_client(api_key: Optional[str] = None):
     key = api_key or POLZA_API_KEY
     if not key:
         return None
-    return AsyncOpenAI(api_key=key, base_url=POLZA_BASE_URL)
+    return AsyncOpenAI(
+        api_key=key,
+        base_url=POLZA_BASE_URL,
+        timeout=httpx.Timeout(REQUEST_TIMEOUT, connect=20.0),
+        max_retries=1,
+    )
 
 # ---------- System Prompts ----------
 SITE_GENERATION_PROMPT = """Ты — элитный веб-дизайнер уровня Apple, Stripe, Linear, Vercel + senior frontend-разработчик.
@@ -258,35 +266,87 @@ def build_generation_user_message(req: GenerateRequest) -> str:
 СГЕНЕРИРУЙ ПОЛНЫЙ HTML ФАЙЛ СЕЙЧАС. Только код, без объяснений.
 """
 
-async def call_polza_chat(messages: List[Dict], model: str, api_key: Optional[str] = None, temperature: float = 0.8, max_tokens: int = 16000) -> str:
+def clean_html_output(content: str) -> str:
+    """Аккуратно снимаем markdown-обёртку, не портя сам HTML."""
+    if not content:
+        return ""
+    text = content.strip()
+    fence = re.match(r'^```[a-zA-Z]*\s*\n(.*?)\n?```\s*$', text, re.DOTALL)
+    if fence:
+        text = fence.group(1).strip()
+    else:
+        text = re.sub(r'^```[a-zA-Z]*\s*', '', text)
+        text = re.sub(r'```\s*$', '', text)
+    match = re.search(r'<!DOCTYPE.*?</html>', text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(0).strip()
+    match = re.search(r'<html.*?</html>', text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(0).strip()
+    return text.strip()
+
+
+async def stream_polza_chat(
+    messages: List[Dict],
+    model: str,
+    api_key: Optional[str] = None,
+    temperature: float = 0.8,
+    max_tokens: int = 16000,
+):
+    """Стримим ответ модели чанками. Так соединение живое и ничего не виснет."""
     client = get_polza_client(api_key)
     if not client:
         raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен. Укажите ключ в .env или в запросе.")
-    
-    # Попробуем каскад моделей если основная не сработала
+
     models_to_try = [model] + [m for m in FALLBACK_MODELS if m != model]
-    
     last_error = None
-    for m in models_to_try[:3]:  # пробуем 3 модели
+
+    for m in models_to_try[:3]:
         try:
-            resp = await client.chat.completions.create(
+            stream = await client.chat.completions.create(
                 model=m,
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
+                stream=True,
             )
-            content = resp.choices[0].message.content
-            # Очистим от markdown если есть
-            content = re.sub(r'^```html\s*', '', content, flags=re.MULTILINE)
-            content = re.sub(r'^```\s*', '', content, flags=re.MULTILINE)
-            content = re.sub(r'\s*```$', '', content, flags=re.MULTILINE)
-            return content.strip()
-        except Exception as e:
+            got_any = False
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                delta = chunk.choices[0].delta
+                piece = getattr(delta, "content", None)
+                if piece:
+                    got_any = True
+                    yield ("delta", piece, m)
+            if got_any:
+                yield ("done", "", m)
+                return
+            last_error = f"Модель {m} вернула пустой ответ"
+        except Exception as e:  # noqa: BLE001
             last_error = str(e)
-            print(f"Model {m} failed: {e}")
+            print(f"Model {m} stream failed: {e}")
             continue
-    
-    raise HTTPException(status_code=500, detail=f"Все модели упали. Последняя ошибка: {last_error}")
+
+    raise HTTPException(status_code=502, detail=f"Все модели упали. Последняя ошибка: {last_error}")
+
+
+async def call_polza_chat(
+    messages: List[Dict],
+    model: str,
+    api_key: Optional[str] = None,
+    temperature: float = 0.8,
+    max_tokens: int = 16000,
+) -> Dict[str, str]:
+    """Собираем полный ответ поверх стрима (соединение не простаивает -> нет зависаний)."""
+    parts: List[str] = []
+    used_model = model
+    async for kind, piece, m in stream_polza_chat(messages, model, api_key, temperature, max_tokens):
+        used_model = m
+        if kind == "delta":
+            parts.append(piece)
+    return {"html": clean_html_output("".join(parts)), "model_used": used_model}
+
 
 # ---------- Routes ----------
 @app.get("/health")
@@ -412,27 +472,65 @@ async def get_models():
 @app.post("/api/generate")
 async def generate_site(req: GenerateRequest):
     model = req.model or DEFAULT_TEXT_MODEL
-    
+
     messages = [
         {"role": "system", "content": SITE_GENERATION_PROMPT},
         {"role": "user", "content": build_generation_user_message(req)}
     ]
-    
+
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.75, max_tokens=8192)
-        
-        # Проверка что это HTML
-        if "<!DOCTYPE" not in html and "<html" not in html:
-            # Попробуем извлечь HTML из текста
-            match = re.search(r'<!DOCTYPE.*</html>', html, re.DOTALL | re.IGNORECASE)
-            if match:
-                html = match.group(0)
-        
-        return {"html": html, "model_used": model}
+        result = await call_polza_chat(messages, model, req.api_key, temperature=0.75, max_tokens=16000)
+        if not result["html"]:
+            raise HTTPException(status_code=502, detail="Модель вернула пустой ответ. Попробуйте ещё раз.")
+        return result
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/generate-stream")
+async def generate_site_stream(req: GenerateRequest):
+    """SSE-стрим генерации сайта. Фронт видит прогресс и соединение не отваливается."""
+    model = req.model or DEFAULT_TEXT_MODEL
+    messages = [
+        {"role": "system", "content": SITE_GENERATION_PROMPT},
+        {"role": "user", "content": build_generation_user_message(req)}
+    ]
+
+    async def event_source():
+        collected: List[str] = []
+        used_model = model
+        # сразу отдаём первый байт, чтобы прокси/браузер увидели живое соединение
+        yield f"data: {json.dumps({'type': 'start', 'model': model}, ensure_ascii=False)}\n\n"
+        try:
+            async for kind, piece, m in stream_polza_chat(
+                messages, model, req.api_key, temperature=0.75, max_tokens=16000
+            ):
+                used_model = m
+                if kind == "delta":
+                    collected.append(piece)
+                    yield f"data: {json.dumps({'type': 'delta', 'text': piece}, ensure_ascii=False)}\n\n"
+            html = clean_html_output("".join(collected))
+            if not html:
+                raise RuntimeError("Модель вернула пустой ответ")
+            payload = {"type": "done", "html": html, "model_used": used_model}
+            yield f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+        except HTTPException as e:
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e.detail)}, ensure_ascii=False)}\n\n"
+        except Exception as e:  # noqa: BLE001
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
 
 @app.post("/api/refine")
 async def refine_site(req: RefineRequest):
@@ -450,8 +548,10 @@ async def refine_site(req: RefineRequest):
     ]
     
     try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=8192)
-        return {"html": html, "model_used": model}
+        result = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=16000)
+        if not result["html"]:
+            raise HTTPException(status_code=502, detail="Модель вернула пустой ответ. Попробуйте ещё раз.")
+        return result
     except HTTPException:
         raise
     except Exception as e:
