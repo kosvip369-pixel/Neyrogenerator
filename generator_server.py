@@ -30,7 +30,7 @@ POLZA_BASE_URL = os.environ.get("POLZA_BASE_URL", "https://polza.ai/api/v1")
 PORT = int(os.environ.get("PORT", 8000))
 
 # Модели по умолчанию - рекомендации с polza.ai
-DEFAULT_TEXT_MODEL = "anthropic/claude-sonnet-4-5"  # Лучшая для фронтенда
+DEFAULT_TEXT_MODEL = anthropic/claude-sonnet-4-5
 DEFAULT_IMAGE_MODEL = "bytedance/seedream-4.5"
 FALLBACK_MODELS = [
     "anthropic/claude-sonnet-4-5",

@@ -7,7 +7,198 @@
 <meta name="description" content="AI-генератор сайтов на Polza AI. Опиши идею — получи готовый сайт с анимациями, картинками, адаптивом. Чат-доработка, генерация изображений, экспорт.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.tailwindcss.com">
+// ---------- Voice Input (Голосовой ввод) ----------
+let currentSpeechRec = null;
+function startVoiceInput(inputId, btnId){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
+  }
+
+  const btn = document.getElementById(btnId);
+  const input = document.getElementById(inputId);
+  if(!btn || !input) return;
+
+  if(btn.dataset.recording === 'true'){
+    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
+    btn.dataset.recording = 'false';
+    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    toast('Запись остановлена', '⏹');
+    return;
+  }
+
+  try{
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      btn.dataset.recording = 'true';
+      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
+      toast('Слушаю вас... Говорите', '🎙️');
+    };
+
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript;
+      if(text){
+        input.value = input.value ? (input.value + ' ' + text) : text;
+        toast('Распознано!', '✓');
+      }
+    };
+
+    recognition.onerror = (e) => {
+      console.log('Speech error', e);
+      toast('Не удалось распознать голос', '⚠️');
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
+
+    recognition.onend = () => {
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
+
+    currentSpeechRec = recognition;
+    recognition.start();
+  }catch(e){
+    toast('Ошибка микрофона: ' + e.message, '⚠️');
+  }
+}
+
+// ---------- Photoshop & Media Tools ----------
+let currentUserPhotoBase64 = null;
+
+function switchImgTool(tool){
+  ['photoshop', 'generate', 'search'].forEach(t => {
+    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
+    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
+    if(panel) panel.classList.toggle('hidden', t !== tool);
+    if(tab){
+      if(t === tool){
+        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
+      } else {
+        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
+      }
+    }
+  });
+}
+
+function handleUserPhotoSelected(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    currentUserPhotoBase64 = e.target.result;
+    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
+    document.getElementById('photoshopFileName').textContent = file.name;
+    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
+    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
+    toast('Фото загружено!', '✓');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function applyAiPhotoshop(){
+  if(!currentUserPhotoBase64){
+    return toast('Сначала загрузите фотографию!', '⚠️');
+  }
+  const prompt = document.getElementById('photoshopPrompt').value.trim();
+  if(!prompt){
+    return toast('Напишите, что изменить на фото', '⚠️');
+  }
+  const apiKey = getKey();
+  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
+
+  const btn = document.getElementById('aiPhotoshopBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Обработка...';
+  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
+
+  try {
+    const fullPrompt = 'Professional web design photo editing: ' + prompt;
+    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
+    
+    const resp = await fetch('https://polza.ai/api/v1/media', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image',
+        input: {
+          prompt: fullPrompt,
+          images: [{ type: 'base64', data: base64Data }]
+        }
+      })
+    });
+
+    if(!resp.ok){
+      const err = await resp.text();
+      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
+    }
+
+    const data = await resp.json();
+    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
+    const mediaId = data.id || data.request_id || data.requestId;
+
+    if(!resultUrl && mediaId){
+      for(let i = 0; i < 20; i++){
+        await new Promise(r => setTimeout(r, 2000));
+        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if(st.ok){
+          const sj = await st.json();
+          if(sj.status === 'completed' || sj.status === 'succeeded'){
+            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
+            break;
+          }
+        }
+      }
+    }
+
+    if(resultUrl){
+      insertImage(resultUrl);
+      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
+    } else {
+      toast('Готово! Изображение обработано', '✓');
+    }
+  } catch(e) {
+    toast('Ошибка фотошопа: ' + e.message, '⚠️');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🪄 Изменить';
+  }
+}
+
+// ---------- Owner Unlimited Authentication ----------
+function checkOwnerAuth(){
+  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
+  const badge = document.getElementById('ownerStatusBadge');
+  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
+  if(badge) badge.classList.toggle('hidden', !isOwner);
+  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
+}
+
+function verifyOwnerPassword(pass){
+  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
+    localStorage.setItem('neurasite_owner', 'true');
+    checkOwnerAuth();
+    toast('Режим владельца активирован: Безлимит! 👑', '👑');
+    document.getElementById('ownerPinModal')?.classList.add('hidden');
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  checkOwnerAuth();
+});
+
+</script>
 <script>
 tailwind.config = {
   theme: {
@@ -17,6 +208,197 @@ tailwind.config = {
     }
   }
 }
+
+// ---------- Voice Input (Голосовой ввод) ----------
+let currentSpeechRec = null;
+function startVoiceInput(inputId, btnId){
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
+  }
+
+  const btn = document.getElementById(btnId);
+  const input = document.getElementById(inputId);
+  if(!btn || !input) return;
+
+  if(btn.dataset.recording === 'true'){
+    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
+    btn.dataset.recording = 'false';
+    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    toast('Запись остановлена', '⏹');
+    return;
+  }
+
+  try{
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      btn.dataset.recording = 'true';
+      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
+      toast('Слушаю вас... Говорите', '🎙️');
+    };
+
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript;
+      if(text){
+        input.value = input.value ? (input.value + ' ' + text) : text;
+        toast('Распознано!', '✓');
+      }
+    };
+
+    recognition.onerror = (e) => {
+      console.log('Speech error', e);
+      toast('Не удалось распознать голос', '⚠️');
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
+
+    recognition.onend = () => {
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
+
+    currentSpeechRec = recognition;
+    recognition.start();
+  }catch(e){
+    toast('Ошибка микрофона: ' + e.message, '⚠️');
+  }
+}
+
+// ---------- Photoshop & Media Tools ----------
+let currentUserPhotoBase64 = null;
+
+function switchImgTool(tool){
+  ['photoshop', 'generate', 'search'].forEach(t => {
+    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
+    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
+    if(panel) panel.classList.toggle('hidden', t !== tool);
+    if(tab){
+      if(t === tool){
+        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
+      } else {
+        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
+      }
+    }
+  });
+}
+
+function handleUserPhotoSelected(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e){
+    currentUserPhotoBase64 = e.target.result;
+    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
+    document.getElementById('photoshopFileName').textContent = file.name;
+    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
+    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
+    toast('Фото загружено!', '✓');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function applyAiPhotoshop(){
+  if(!currentUserPhotoBase64){
+    return toast('Сначала загрузите фотографию!', '⚠️');
+  }
+  const prompt = document.getElementById('photoshopPrompt').value.trim();
+  if(!prompt){
+    return toast('Напишите, что изменить на фото', '⚠️');
+  }
+  const apiKey = getKey();
+  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
+
+  const btn = document.getElementById('aiPhotoshopBtn');
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Обработка...';
+  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
+
+  try {
+    const fullPrompt = 'Professional web design photo editing: ' + prompt;
+    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
+    
+    const resp = await fetch('https://polza.ai/api/v1/media', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image',
+        input: {
+          prompt: fullPrompt,
+          images: [{ type: 'base64', data: base64Data }]
+        }
+      })
+    });
+
+    if(!resp.ok){
+      const err = await resp.text();
+      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
+    }
+
+    const data = await resp.json();
+    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
+    const mediaId = data.id || data.request_id || data.requestId;
+
+    if(!resultUrl && mediaId){
+      for(let i = 0; i < 20; i++){
+        await new Promise(r => setTimeout(r, 2000));
+        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+        if(st.ok){
+          const sj = await st.json();
+          if(sj.status === 'completed' || sj.status === 'succeeded'){
+            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
+            break;
+          }
+        }
+      }
+    }
+
+    if(resultUrl){
+      insertImage(resultUrl);
+      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
+    } else {
+      toast('Готово! Изображение обработано', '✓');
+    }
+  } catch(e) {
+    toast('Ошибка фотошопа: ' + e.message, '⚠️');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🪄 Изменить';
+  }
+}
+
+// ---------- Owner Unlimited Authentication ----------
+function checkOwnerAuth(){
+  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
+  const badge = document.getElementById('ownerStatusBadge');
+  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
+  if(badge) badge.classList.toggle('hidden', !isOwner);
+  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
+}
+
+function verifyOwnerPassword(pass){
+  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
+    localStorage.setItem('neurasite_owner', 'true');
+    checkOwnerAuth();
+    toast('Режим владельца активирован: Безлимит! 👑', '👑');
+    document.getElementById('ownerPinModal')?.classList.add('hidden');
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  checkOwnerAuth();
+});
+
 </script>
 <style>
 :root{--bg:#070A12;--bg2:#0F1320;--card:#151A2D;--line:#1E2540;--accent:#6C5CFF;--accent2:#8B7DFF;--accent3:#4F46E5;--green:#00D492;--pink:#FF4D8D;--cyan:#00D9FF}
@@ -52,7 +434,6 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 @keyframes typing{0%,60%,100%{opacity:0.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
 .code-block{background:#0A0E1A;border:1px solid #1E2540}
 </style>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body class="min-h-screen relative">
 <!-- Background -->
@@ -63,42 +444,32 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 
 <!-- Header -->
 <header class="sticky top-0 z-50 glass-strong border-b border-white/5">
-  <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3.5 flex items-center justify-between gap-4">
-    <div class="flex items-center gap-3 cursor-pointer select-none group" onclick="handleLogoClick()" title="Нажмите 3 раза для входа владельца">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/40 text-lg group-hover:scale-105 transition">✦</div>
-      <div>
-        <div class="font-space font-bold text-[17px] leading-tight text-white flex items-center gap-2">
-          NeuraSite AI
-          <span id="ownerBadge" class="hidden text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold shadow animate-pulse">👑 ВЛАДЕЛЕЦ</span>
-          <span id="versionBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
+  <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-3 flex items-center justify-between gap-4">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-[#6C5CFF] to-[#4F46E5] flex items-center justify-center font-bold text-white shadow-lg shadow-[#6C5CFF]/30">✦</div>
+        <div>
+          <div class="font-space font-bold text-[16px] leading-none">NeuraSite AI</div>
+          <div class="text-[11px] text-white/50 tracking-wider">ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
         </div>
-        <div class="text-[11px] text-white/50 font-mono tracking-wider">AI-ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
       </div>
+      <div id="ownerStatusBadge" class="hidden px-2.5 py-1 rounded-full bg-[#FFE17B]/20 border border-[#FFE17B]/40 text-[#FFE17B] text-[11px] font-bold">👑 ВЛАДЕЛЕЦ</div>
     </div>
     
-    <div class="flex items-center gap-2 sm:gap-3">
-      <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="btn-ghost px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-[#8B7DFF] border-[#6C5CFF]/30 flex items-center gap-1.5 hover:bg-[#6C5CFF]/10 transition">
-        <span>⚡</span> <span>Шаблоны</span>
+    <div class="flex items-center gap-2">
+      <button type="button" onclick="loadExample()" class="btn-ghost px-3 py-2 rounded-xl text-[12px] font-medium hidden sm:flex items-center gap-1">
+        <span>⚡</span> <span>Пример</span>
       </button>
-      <button id="tariffsHeaderBtn" onclick="openPricingModal()" class="btn-primary px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold text-white flex items-center gap-1.5 shadow-lg shadow-[#6C5CFF]/20">
-        <span>💳</span> <span>Тарифы</span>
-      </button>
-      <button id="ownerStatusBtn" onclick="openOwnerModal()" class="hidden px-3 sm:px-4 py-2 rounded-xl text-[12px] sm:text-[13px] font-bold bg-[#D4AF37]/20 border border-[#D4AF37]/50 text-[#FFE17B] flex items-center gap-1.5 shadow">
-        <span>👑</span> <span>VIP Безлимит</span>
+      <button type="button" id="tariffsHeaderBtn" onclick="openPricingModal()" class="btn-ghost px-3 py-2 rounded-xl text-[12px] font-medium text-[#8B7DFF] border-[#6C5CFF]/30 hover:bg-[#6C5CFF]/10">
+        💳 Тарифы
       </button>
     </div>
   </div>
-
-  <!-- Hidden inputs for seamless background API functioning -->
   <input id="polzaKey" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
   <input id="polzaKeyMobile" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
   <input id="keyModalInput" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
-  <select id="modelSelect" class="hidden">
-    <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
-  </select>
-  <select id="modelSelectMobile" class="hidden">
-    <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
-  </select>
+  <select id="modelSelect" class="hidden"><option value="anthropic/claude-sonnet-4-5" selected></option></select>
+  <select id="modelSelectMobile" class="hidden"><option value="anthropic/claude-sonnet-4-5" selected></option></select>
 </header>
 
 <!-- Main Layout -->
@@ -123,35 +494,35 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Сфера</label>
             <select id="businessType" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="">Выберите нишу вашего бизнеса</option>
-              <option value="Строительство домов, ремонт, недвижимость">🏗️ Строительство / Дома / Ремонт</option>
-              <option value="Недвижимость, аренда квартир, ЖК">🏢 Недвижимость / Аренда / ЖК</option>
-              <option value="Ресторан, кафе, доставка еды">🍕 Ресторан / Кафе / Доставка</option>
-              <option value="Автосервис, детейлинг, шиномонтаж">🚗 Автосервис / Детейлинг / Шины</option>
-              <option value="Салон красоты, барбершоп, SPA">💇 Салон красоты / Барбершоп / SPA</option>
-              <option value="Медицинская клиника, стоматология">🩺 Медицина / Клиника / Стоматология</option>
-              <option value="Интернет-магазин, розничные товары">🛍️ Магазин товаров / Шоурум</option>
-              <option value="Бытовые услуги, монтаж, уборка">⚡ Услуги / Монтаж / Клининг</option>
-              <option value="IT, SaaS, мобильные приложения">💻 IT / Программы / Приложения</option>
-              <option value="Обучение, онлайн-курсы, репетитор">🎓 Обучение / Онлайн-курсы</option>
-              <option value="Юридические услуги, бухгалтерия">⚖️ Юристы / Бухгалтерия / Финансы</option>
-              <option value="Портфолио мастера, личный бренд">👤 Портфолио мастера / Эксперт</option>
+              <option value="">Выбери нишу</option>
+              <option value="IT / SaaS / Стартап">IT / SaaS / Стартап</option>
+              <option value="E-commerce / Магазин">E-commerce / Магазин</option>
+              <option value="Ресторан / Кафе">Ресторан / Кафе / Food</option>
+              <option value="Клиника / Медицина">Клиника / Медицина</option>
+              <option value="Фитнес / Спорт">Фитнес / Спорт</option>
+              <option value="Недвижимость">Недвижимость</option>
+              <option value="Образование / Курсы">Образование / Курсы</option>
+              <option value="Красота / Салон">Красота / Салон / Barbershop</option>
+              <option value="Авто / Детейлинг">Авто / Детейлинг / Сервис</option>
+              <option value="Юрист / Консалтинг">Юрист / Консалтинг</option>
+              <option value="Портфолио / Личный бренд">Портфолио / Личный бренд</option>
+              <option value="Креатив / Агентство">Креатив / Агентство / Дизайн</option>
             </select>
           </div>
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Тип сайта</label>
-            <select id="siteType" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="landing" selected>📄 Одностраничник (Лендинг для продаж и рекламы)</option>
-              <option value="multipage">📑 Многостраничный сайт (Главная, Каталог, О компании, Отзывы, Контакты)</option>
-              <option value="ecommerce">🛍️ Каталог с карточками товаров и ценами</option>
-              <option value="portfolio">👤 Сайт-визитка (кратко о компании и контакты)</option>
+            <select id="siteType" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px] font-medium">
+              <option value="multipage" selected>📑 Многостраничный сайт (Главная, Каталог, О компании, Отзывы, Контакты)</option>
+              <option value="landing">📄 Одностраничник (Лендинг для продаж и рекламы)</option>
+              <option value="ecommerce">🛍️ Интернет-магазин с каталогом товаров и корзиной</option>
+              <option value="portfolio">👤 Сайт-визитка / Портфолио услуг</option>
             </select>
           </div>
         </div>
 
         <div>
-          <div class="flex items-center justify-between">
-            <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Подробно</label>
+          <div class="flex items-center justify-between mb-1">
+            <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Опишите задачу</label>
             <button type="button" onclick="startVoiceInput('mainPrompt', 'voiceBtnMain')" id="voiceBtnMain" class="text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition">
               <span>🎙️</span> <span>Голосом</span>
             </button>
@@ -169,11 +540,16 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div>
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Стиль дизайна</label>
             <select id="styleSelect" class="input-field w-full mt-1.5 px-3 py-2.5 rounded-xl text-[13px]">
-              <option value="luxury dark + gold (дорогой темный стиль с золотом)">💎 Премиум и дорогой (тёмный фон, золотые/неоновые акценты)</option>
-              <option value="modern clean minimal (чистый светлый минимализм)">☀️ Светлый и современный (чистый, лёгкий, минимализм)</option>
-              <option value="corporate trust blue (деловой строгий синий)">🏛️ Деловой и надёжный (строгий корпоративный, доверительный синий)</option>
-              <option value="warm cozy aesthetic (уютный теплый бежевый)">☕ Тёплый и уютный (бежевый, дерево, пастельные тона)</option>
-              <option value="cyberpunk energetic neon (яркий молодежный драйв)">⚡ Яркий и динамичный (спорт, драйв, сочные градиенты)</option>
+              <option value="modern premium like Linear/Stripe">Modern Premium (Linear/Stripe)</option>
+              <option value="glassmorphism + gradients">Glassmorphism + Gradients</option>
+              <option value="minimalism + typography">Minimalism Typography</option>
+              <option value="neomorphism soft">Neomorphism Soft</option>
+              <option value="brutalism bold">Brutalism Bold</option>
+              <option value="luxury dark + gold">Luxury Dark + Gold</option>
+              <option value="cyberpunk neon">Cyberpunk Neon</option>
+              <option value="corporate trust blue">Corporate Trust Blue</option>
+              <option value="claymorphism 3d">Claymorphism 3D</option>
+              <option value="startup friendly bright">Startup Friendly</option>
             </select>
           </div>
           <div>
@@ -219,7 +595,6 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <button onclick="randomize()" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px]">🎲 Рандом</button>
       <button onclick="clearAll()" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px]">↺ Очистить</button>
       <button onclick="loadExample()" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px]">📄 Пример</button>
-      <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px] text-[#8B7DFF] font-bold border-[#6C5CFF]/40 bg-[#6C5CFF]/10">⚡ Шаблоны</button>
     </div>
 
     <!-- Image & Photoshop Tools -->
@@ -237,17 +612,25 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
 
       <!-- Photoshop Upload & Edit -->
       <div id="toolPanelPhotoshop" class="space-y-2">
-        <div class="border-2 border-dashed border-white/15 hover:border-[#6C5CFF]/50 rounded-xl p-2.5 text-center cursor-pointer transition bg-white/[0.02]" onclick="document.getElementById('userPhotoInput').click()">
-          <input type="file" id="userPhotoInput" accept="image/*" class="hidden" onchange="handleUserPhotoSelected(event)">
-          <div id="uploadPromptBox" class="text-[12px] text-white/70">📁 <span class="text-white font-bold">Загрузить фото</span> <span class="text-[10px] text-white/40 block">с камеры или телефона</span></div>
-          <div id="uploadedPreviewBox" class="hidden items-center justify-center gap-2">
-            <img id="uploadedThumb" src="" class="w-10 h-10 rounded-lg object-cover border border-white/20">
-            <span class="text-[11px] text-[#00D492] font-bold">✓ Фото выбрано</span>
+        <div class="border-2 border-dashed border-white/15 hover:border-[#6C5CFF]/60 rounded-xl p-3 text-center cursor-pointer transition relative bg-white/[0.02]" onclick="document.getElementById('userPhotoUpload').click()">
+          <input type="file" id="userPhotoUpload" accept="image/*" class="hidden" onchange="handleUserPhotoSelected(event)">
+          <div id="photoshopUploadPrompt" class="flex flex-col items-center gap-1 text-white/60">
+            <span class="text-xl">📸</span>
+            <span class="text-[12px] font-medium text-white/80">Загрузите фото с камеры или галереи</span>
+            <span class="text-[10px] text-white/40">Нейросеть изменит или улучшит фото под ваш сайт</span>
+          </div>
+          <div id="photoshopPreviewWrap" class="hidden flex items-center justify-center gap-3">
+            <img id="photoshopThumb" class="w-16 h-16 object-cover rounded-lg border border-white/20 shadow">
+            <div class="text-left">
+              <div class="text-[12px] font-medium text-white" id="photoshopFileName">photo.jpg</div>
+              <div class="text-[11px] text-[#00D492]">✓ Загружено. Напишите задачу ниже</div>
+            </div>
           </div>
         </div>
+
         <div class="flex gap-2">
           <div class="relative flex-1">
-            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="Что сделать? (напр: убери бороду, смени фон)">
+            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="Что изменить: сделать ярче, заменить фон...">
             <button type="button" onclick="startVoiceInput('photoshopPrompt', 'voiceBtnPhotoshop')" id="voiceBtnPhotoshop" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[13px]">🎙️</button>
           </div>
           <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">🪄 Изменить</button>
@@ -258,22 +641,36 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <div id="toolPanelGenerate" class="space-y-2 hidden">
         <div class="flex gap-2">
           <div class="relative flex-1">
-            <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="futuristic office, neon">
+            <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="Например: современный офис с неоновой подсветкой">
             <button type="button" onclick="startVoiceInput('imagePrompt', 'voiceBtnImage')" id="voiceBtnImage" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[13px]">🎙️</button>
           </div>
-          <button type="button" onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
+          <button type="button" onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Создать</button>
         </div>
       </div>
 
       <!-- Search -->
       <div id="toolPanelSearch" class="space-y-2 hidden">
         <div class="flex gap-2">
-          <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск: auto repair, modern office">
+          <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск фото: modern house, coffee...">
           <button type="button" onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍 Найти</button>
         </div>
       </div>
 
-      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto hidden pt-1"></div>
+      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[160px] overflow-y-auto hidden"></div>
+    </div>
+
+    <!-- Image Tools -->
+    <div class="glass rounded-[20px] p-4 space-y-3">
+      <h3 class="font-space font-semibold text-[13px] flex items-center gap-2"><span class="w-5 h-5 rounded-md bg-[#FF4D8D]/20 flex items-center justify-center">◐</span> Картинки & Генерация</h3>
+      <div class="flex gap-2">
+        <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Найти картинку: business team">
+        <button onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍</button>
+      </div>
+      <div class="flex gap-2">
+        <input id="imagePrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Сгенерить: futuristic office, neon">
+        <button onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
+      </div>
+      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto hidden"></div>
     </div>
   </div>
 
@@ -297,10 +694,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <button onclick="openFullscreen()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">⛶ Full</button>
         <button onclick="toggleCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">{"</>"} Код</button>
         <button onclick="copyCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">📋 Копировать</button>
-        <button onclick="downloadSite()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px] font-semibold text-white">⬇ Скачать</button>
-        <button onclick="openDeployModal()" class="btn-primary px-3.5 py-1.5 rounded-lg text-[12px] font-bold text-white flex items-center gap-1.5 bg-gradient-to-r from-[#00D492] to-[#00D9FF] hover:opacity-95 shadow-lg shadow-[#00D492]/25">
-          <span>🚀</span> Опубликовать
-        </button>
+        <button onclick="downloadSite()" class="btn-primary px-4 py-1.5 rounded-lg text-[12px] font-bold text-white">⬇ Скачать</button>
       </div>
     </div>
 
@@ -412,11 +806,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     <div class="glass rounded-[20px] p-4 space-y-3">
       <h3 class="font-space font-semibold text-[13px]">Экспорт и деплой</h3>
       <div class="grid grid-cols-2 gap-2">
-        <button onclick="openDeployModal()" class="btn-primary col-span-2 py-2.5 rounded-xl text-[12px] font-bold text-white flex items-center justify-center gap-1.5 bg-gradient-to-r from-[#00D492] to-[#00D9FF]">🚀 Опубликовать сайт</button>
-        <button onclick="downloadSite()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">⬇ Скачать HTML</button>
-        <button onclick="downloadHostingZip()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">📦 ZIP для хостинга</button>
-        <button onclick="copyCode()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">📋 Скопировать код</button>
-        <button onclick="openInNewTab()" class="btn-ghost py-2 rounded-xl text-[11px] font-medium">↗ В новой вкладке</button>
+        <button onclick="downloadSite()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">⬇ HTML</button>
+        <button onclick="copyCode()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">📋 Копировать</button>
+        <button onclick="openInNewTab()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">↗ Открыть</button>
+        <button onclick="shareSite()" class="btn-ghost py-2.5 rounded-xl text-[12px] font-medium">🔗 Поделиться</button>
       </div>
       <div class="pt-2 border-t border-white/5">
         <div class="text-[11px] font-mono text-white/40 mb-2">История генераций</div>
@@ -679,8 +1072,8 @@ function saveKey(){
     document.getElementById('keyModal').classList.remove('hidden');
     return;
   }
-  if(!k || k.length < 8){
-    toast('Введите корректный Polza API ключ', '⚠️');
+  if(!k.startsWith('sk-')){
+    toast('Ключ должен начинаться с sk-...', '⚠️');
     return;
   }
   localStorage.setItem('polza_key', k);
@@ -730,7 +1123,10 @@ function checkKeyOnStart(){
   updateKeyUI();
   const k = getKey();
   if(!k){
-    // auto configured
+    setTimeout(()=>{
+      document.getElementById('keyModal').classList.remove('hidden');
+      toast('Сначала укажи Polza API ключ!', '🔑');
+    }, 1000);
   }
 }
 function setPrompt(t){ document.getElementById('mainPrompt').value = t; }
@@ -760,103 +1156,94 @@ function getFormData(){
 // ---------- Backend vs Direct ----------
 async function callGenerateAPI(data){
   const apiKey = getKey();
-  const model = getModel();
   
-  // Попробуем backend сначала
-  try{
-    const res = await fetch('/api/generate', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({...data, model, api_key: apiKey || undefined})
-    });
-    if(res.ok){
-      const j = await res.json();
-      return {html: j.html, model: j.model_used || model, source:'backend'};
-    }
-  }catch(e){ console.log('Backend not available, fallback to direct', e); }
-
-  // Direct Polza API
-  if(!apiKey){
-    throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
-  }
-  
-  const system = `Ты — ведущий креативный веб-дизайнер и разработчик мирового уровня (Awwwards, Apple, Stripe, Linear).
-Твоя цель: создать ПО-НАСТОЯЩЕМУ ТОПОВЫЙ, живой, кинематографичный сайт с ВАУ-эффектом в ОДНОМ ПОЛНОМ HTML-файле!
-
-ГЛАВНЫЕ ТРЕБОВАНИЯ К ДИЗАЙНУ И КАРТИНКАМ:
-1. КАРТИНКИ (ГИБРИД: РЕАЛЬНЫЕ ФОТО + СГЕНЕРИРОВАННЫЙ КРЕАТИВ):
-   - Обычные фотографии (интерьеры, авто, здания, люди) бери из Unsplash c надежными ссылками и onerror-защитой.
-   - УНИКАЛЬНЫЙ АРТ, АБСТРАКЦИИ, ФУТУРИЗМ, АНИМАЦИИ: ГЕНЕРИРУЙ САМ через SVG, CSS-кейфреймы и Canvas-эффекты! 
-   - Создавай роскошные живые фоны: плавающие градиентные сферы (mesh gradients), анимированные частицы, неоновые акценты, стеклянные карточки (backdrop-blur-xl bg-white/5 border border-white/10).
-   - Если нужен уникальный 3D/AI-баннер или иллюстрация: рисуй детализированный анимированный SVG-арт прямо в коде, чтобы сайт не зависел от внешних картинок и выглядел как технологический шедевр!
-
-2. ЖИВЫЕ АНИМАЦИИ (ОБЯЗАТЕЛЬНО):
-   - Подключи GSAP: https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js и ScrollTrigger: https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/ScrollTrigger.min.js
-   - Анимируй появление блоков (fade up, stagger эффект при скролле).
-   - Добавь интерактивные микро-анимации на наведение: hover:scale-105, hover:shadow-2xl, подсветка кнопок, плавные градиенты.
-
-3. СТРОГОЕ ТРЕБОВАНИЕ К МНОГОСТРАНИЧНОСТИ (ЕСЛИ ВЫБРАН МНОГОСТРАНИЧНЫЙ ТИП ИЛИ ЕСТЬ ЗАПРОС НА СТРАНИЦЫ):
-   - КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО делать обычный одностраничный скролл-лендинг, если тип 'multipage' или пользователь попросил страницы!
-   - ОБЯЗАТЕЛЬНО создай полноценную систему переключения страниц внутри одного файла (SPA):
-     1. <section id="page-home" class="page-view active min-h-screen"> — Главная страница с ярким Hero, краткими анонсами услуг, преимуществами и призывом.
-     2. <section id="page-catalog" class="page-view hidden min-h-screen"> — Отдельная страница: детальный Каталог/Услуги с фильтрами, карточками, ценами и кнопками заказа.
-     3. <section id="page-about" class="page-view hidden min-h-screen"> — Отдельная страница: О компании, история, миссия, команда с фото и регалиями.
-     4. <section id="page-reviews" class="page-view hidden min-h-screen"> — Отдельная страница: Отзывы клиентов, кейсы, сертификаты и оценки.
-     5. <section id="page-contacts" class="page-view hidden min-h-screen"> — Отдельная страница: Контакты, интерактивная карта-макет, реквизиты, форма обратной связи.
-   - В шапке (header) и мобильном меню (mobileMenu) ВСЕ ссылки меню (Главная, Каталог/Услуги, О нас, Отзывы, Контакты) ОБЯЗАНЫ иметь вид:
-     <a href="javascript:void(0)" onclick="showPage('catalog')" class="nav-link cursor-pointer hover:text-[#6C5CFF] transition">Каталог</a>
-   - Внизу файла ДОЛЖНА БЫТЬ ЖЕЛЕЗНО РАБОЧАЯ функция showPage:
-     window.showPage = function(pageId) {
-       document.querySelectorAll('.page-view').forEach(function(el){ el.classList.add('hidden'); });
-       const target = document.getElementById('page-' + pageId);
-       if(target) { target.classList.remove('hidden'); }
-       window.scrollTo({top: 0, behavior: 'smooth'});
-       const mob = document.getElementById('mobileMenu');
-       if(mob) mob.classList.add('hidden');
-     };
-   - Пользователь при нажатии на пункты меню ДОЛЖЕН ВИДЕТЬ РЕАЛЬНУЮ СМЕНУ СТРАНИЦ!
-
-4. ТЕКСТ И СТРУКТУРА:
-   - Мощный Hero-заголовок, подзаголовок, УТП, счетчики достижений, сетка карточек с ценностью, интерактивный блок с фильтрами/калькулятором, стильные отзывы с аватарами, форма заявки с модальным окном успеха.
-   - Стили: Tailwind CSS, шрифты Google Fonts (Inter/Outfit/Manrope).
-   - Верни ТОЛЬКО чистый код HTML, начиная строго с <!DOCTYPE html>, без пояснений и без markdown.`;
-
-  // Автоматический выбор лучшей нейросети для веб-разработки (никаких слабых моделей)
-  const promptLower = (data.prompt || '').toLowerCase();
-  const isMulti = promptLower.includes('многостранич') || promptLower.includes('несколько страниц') || promptLower.includes('раздел') || promptLower.includes('каталог') || data.site_type === 'multipage';
-  if(isMulti) {
-    data.site_type = 'multipage';
-  }
-  // ВСЕГДА используем Claude Sonnet 4.5 — топовую нейросеть для фронтенда, анимаций и сложного кода
+  // Автоматически фиксируем лучшую модель для верстки кода и анимаций
   const activeModel = 'anthropic/claude-sonnet-4-5';
+
+  const isMultipage = data.site_type === 'multipage' || 
+    (data.prompt && (data.prompt.toLowerCase().includes('многостранич') || data.prompt.toLowerCase().includes('страниц') || data.prompt.toLowerCase().includes('раздел') || data.prompt.toLowerCase().includes('каталог')));
+
+  const multipageInstruction = isMultipage ? `
+КАТЕГОРИЧЕСКОЕ ТРЕБОВАНИЕ: ЭТО ДОЛЖЕН БЫТЬ ПОЛНОЦЕННЫЙ МНОГОСТРАНИЧНЫЙ САЙТ (SPA) В ОДНОМ ФАЙЛЕ!
+НЕ ДЕЛАЙ ОБЫЧНЫЙ СКРОЛЛ-ЛЕНДИНГ!
+Сделай отдельные полноценные разделы-экраны:
+1. <section id="page-home" class="page-view active min-h-screen"> — Главная страница с мощным Hero, оффером, ключевыми преимуществами и кнопками перехода.
+2. <section id="page-catalog" class="page-view hidden min-h-screen"> — Отдельная страница Услуг/Каталога с фильтрами, карточками, ценами и кнопками заказа.
+3. <section id="page-about" class="page-view hidden min-h-screen"> — Отдельная страница «О компании»: история, факты в цифрах, лица команды с фото, принципы.
+4. <section id="page-reviews" class="page-view hidden min-h-screen"> — Отдельная страница «Отзывы»: развернутые отзывы клиентов, кейсы и социальные доказательства.
+5. <section id="page-contacts" class="page-view hidden min-h-screen"> — Отдельная страница «Контакты»: адреса, телефоны, интерактивная стильная карта-макет и форма связи.
+
+В шапке (header) и мобильном меню КАЖДАЯ ссылка должна переключать экраны через JavaScript:
+<a href="javascript:void(0)" onclick="showPage('catalog')" class="nav-link ...">Каталог</a>
+
+Внизу страницы ОБЯЗАТЕЛЬНО рабочий скрипт переключения:
+window.showPage = function(pageId) {
+  document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
+  const target = document.getElementById('page-' + pageId);
+  if(target) { target.classList.remove('hidden'); }
+  window.scrollTo({top: 0, behavior: 'smooth'});
+  const mob = document.getElementById('mobileMenu');
+  if(mob) mob.classList.add('hidden');
+};
+` : `
+ТРЕБОВАНИЕ: Сделай длинный, конверсионный и визуально богатый лендинг с плавным якорным скроллом по всем блокам.
+`;
+
+  const system = `Ты — ведущий креативный веб-дизайнер и Senior Frontend разработчик мирового уровня (Awwwards, Apple, Stripe, Linear).
+Твоя цель: создать ПОЛНЫЙ, ПОТРЯСАЮЩЕ КРАСИВЫЙ, ЖИВОЙ HTML-файл сайта с анимациями и картинками.
+
+ГЛАВНЫЕ ТРЕБОВАНИЯ:
+1. ОДИН ФАЙЛ: весь HTML, Tailwind CSS (https://cdn.tailwindcss.com), шрифты Google Fonts (Inter, Manrope, Space Grotesk), Lucide/FontAwesome и GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
+2. ДИЗАЙН И АНИМАЦИИ:
+   - Дорогой современный стиль: стеклянные карточки (backdrop-blur-xl bg-white/5 border border-white/10), мягкие неоновые подсветки, плавные градиенты.
+   - Анимации GSAP: плавный fade-up появление секций, микро-интерактив при наведении hover:scale-105, hover:shadow-2xl.
+3. КАРТИНКИ:
+   - Вставляй реальные проверенные фотографии высокого качества с https://images.unsplash.com по тематике ниши.
+   - Всегда добавляй onerror fallback на картинки: onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&fit=crop';"
+4. ИНТЕРАКТИВ И МОБИЛЬНОЕ МЕНЮ:
+   - Меню гамбургер на мобильных телефонах ОБЯЗАНО иметь рабочий JavaScript клик (открытие и закрытие).
+   - Форма заявки должна иметь рабочую имитацию отправки с красивым модальным окном благодарности.
+5. ${multipageInstruction}
+
+Русский язык. Верни ТОЛЬКО чистый код HTML, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
-Тип: ${data.site_type}
-Фичи: ${data.features.join(', ')}
+Тип сайта: ${isMultipage ? 'Многостраничный (SPA с разделами Главная, Каталог, О компании, Отзывы, Контакты)' : data.site_type}
+Стиль: ${data.style}
+Цвета: ${data.colors || 'премиальная палитра под нишу'}
 Контакты: ${JSON.stringify(data.contacts)}
-Описание: ${data.prompt}
-СГЕНЕРИРУЙ ПОЛНЫЙ HTML СЕЙЧАС.`;
+Описание задачи: ${data.prompt}
+СГЕНЕРИРУЙ ПОЛНЫЙ САЙТ СЕЙЧАС.`;
 
   const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({model: activeModel, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.85, max_tokens:16000})
+    body: JSON.stringify({
+      model: activeModel,
+      messages:[
+        {role:'system',content:system},
+        {role:'user',content:user}
+      ],
+      temperature:0.8,
+      max_tokens:16000
+    })
   });
+  
   if(!resp.ok){
     const err = await resp.text();
-    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,500)}`);
+    throw new Error(`Polza API error: ${err.slice(0, 300)}`);
   }
+  
   const j = await resp.json();
   let html = j.choices[0].message.content;
-  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  return {html, model, source:'direct'};
+  html = html.replace(/^```html\s*/i,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+  return {html, model: activeModel, source:'direct'};
 }
 
 async function callRefineAPI(currentHtml, message){
   const apiKey = getKey();
-  // Always use high-intelligence Sonnet 4.5 for code refactoring
-  const model = 'anthropic/claude-sonnet-4-5';
+  const model = document.getElementById('modelSelect')?.value?.includes('haiku') ? getModel() : 'anthropic/claude-haiku-4-5';
   
   try{
     const res = await fetch('/api/refine', {
@@ -866,150 +1253,25 @@ async function callRefineAPI(currentHtml, message){
     });
     if(res.ok){
       const j = await res.json();
-      return cleanHtmlCode(j.html);
+      return j.html;
     }
-  }catch(e){ console.log('Backend refine fallback to direct', e); }
+  }catch(e){}
 
-  if(!apiKey) throw new Error('Укажите Polza API ключ');
+  if(!apiKey) throw new Error('Нужен Polza ключ');
   
-  const system = `Ты — ведущий Senior Frontend Архитектор уровня Apple/Linear.
-Твоя задача — внести требуемые изменения в HTML код и вернуть ПОЛНЫЙ обновленный HTML файл.
-
-ОБЯЗАТЕЛЬНЫЕ ПРАВИЛА:
-1. ЕСЛИ ПРОСЯТ СДЕЛАТЬ МНОГОСТРАНИЧНЫЙ САЙТ (или разделить на страницы):
-   - Перестрой верстку в полноценный SPA (Single Page Application)!
-   - Сделай отдельные экраны страниц (<div id="page-home" class="page-view">, <div id="page-catalog" class="page-view hidden">, <div id="page-about" class="page-view hidden">, <div id="page-reviews" class="page-view hidden">, <div id="page-contacts" class="page-view hidden">).
-   - В шапке ссылки в меню должны вызывать showPage('catalog') / showPage('about') / showPage('contacts') и плавно переключать страницы!
-   - Добавь функцию:
-     function showPage(id){
-       document.querySelectorAll('.page-view').forEach(p=>p.classList.add('hidden'));
-       const target = document.getElementById('page-'+id);
-       if(target){ target.classList.remove('hidden'); window.scrollTo({top:0, behavior:'smooth'}); }
-       const m = document.getElementById('mobileMenu');
-       if(m) m.classList.add('hidden');
-     }
-
-2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
-   - Кнопка мобильного меню ОБЯЗАНА 100% открывать и закрывать меню!
-   - Кнопка id="mobileMenuBtn", окно id="mobileMenu" (class="hidden fixed inset-0 z-50 ..."), кнопка закрытия id="closeMobileMenu".
-   - Внизу в <script> обязательно добавь:
-     const mBtn = document.getElementById('mobileMenuBtn');
-     const mMenu = document.getElementById('mobileMenu');
-     const cBtn = document.getElementById('closeMobileMenu');
-     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
-     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
-     document.querySelectorAll('#mobileMenu a').forEach(a => { a.onclick = () => mMenu && mMenu.classList.add('hidden'); });
-
-3. ВЕРНИ ТОЛЬКО ПОЛНЫЙ HTML КОД. Начни сразу с <!DOCTYPE html>. Без markdown, без объяснений.`;
-
-  const user = `Запрос на доработку: ${message}
-
-Текущий HTML код сайта:
-${currentHtml}
-
-Верни ПОЛНЫЙ ОБНОВЛЕННЫЙ HTML КОД с внесенными исправлениями. Только код.`;
+  const system = `Ты senior frontend, дорабатываешь сайт. Дают текущий HTML и запрос что исправить. Верни ПОЛНЫЙ обновленный HTML, сохранив все остальное. Только код, без объяснений.`;
+  const user = `Запрос: ${message}\n\nТекущий HTML:\n${currentHtml.slice(0,80000)}\n\nВерни ПОЛНЫЙ обновленный HTML.`;
   
   const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({
-      model: model,
-      messages:[
-        {role:'system', content:system},
-        {role:'user', content:user}
-      ],
-      temperature:0.6,
-      max_tokens:16000
-    })
+    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.7, max_tokens:16000})
   });
-  
-  if(!resp.ok){
-    const errText = await resp.text();
-    throw new Error(`Ошибка Polza API: ${errText.slice(0, 250)}`);
-  }
-  
+  if(!resp.ok) throw new Error('Polza API error');
   const j = await resp.json();
-  let rawHtml = j.choices[0].message.content;
-  return cleanHtmlCode(rawHtml);
-}
-
-// Курированная библиотека 100% реальных и красивых фото Unsplash по категориям
-const CURATED_NICHE_IMAGES = {
-  construction: [
-    'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1541888946425-d0fbb18615f7?w=800&auto=format&fit=crop&q=80'
-  ],
-  auto: [
-    'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1486006920555-c77dce18193b?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1503376780353-7e6692767b70?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1563720223185-11003d516935?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1517524008697-84bbe3c3fd98?w=800&auto=format&fit=crop&q=80'
-  ],
-  restaurant: [
-    'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1550547660-d9450f859349?w=800&auto=format&fit=crop&q=80'
-  ],
-  beauty: [
-    'https://images.unsplash.com/photo-1560066984-138dadb4c035?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1503951914875-452162b0f3f1?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1582095133179-bfd08e2fc6b3?w=800&auto=format&fit=crop&q=80'
-  ],
-  medical: [
-    'https://images.unsplash.com/photo-1629909613654-28e377c37b09?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80'
-  ],
-  tech: [
-    'https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1497366216548-37526070297c?w=1200&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=800&auto=format&fit=crop&q=80',
-    'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=800&auto=format&fit=crop&q=80'
-  ]
-};
-
-// Функция гарантированного наполнения сайта рабочими картинками
-function enrichHtmlImages(html){
-  if(!html) return '';
-  const textLower = html.toLowerCase();
-  let pool = CURATED_NICHE_IMAGES.tech;
-  if(textLower.includes('строит') || textLower.includes('дом') || textLower.includes('ремонт') || textLower.includes('недвиж')) pool = CURATED_NICHE_IMAGES.construction;
-  else if(textLower.includes('авто') || textLower.includes('машин') || textLower.includes('сервис') || textLower.includes('шиномонтаж')) pool = CURATED_NICHE_IMAGES.auto;
-  else if(textLower.includes('ресторан') || textLower.includes('кафе') || textLower.includes('ед') || textLower.includes('пицц') || textLower.includes('бургер')) pool = CURATED_NICHE_IMAGES.restaurant;
-  else if(textLower.includes('красот') || textLower.includes('салон') || textLower.includes('барбер') || textLower.includes('ногт') || textLower.includes('волос')) pool = CURATED_NICHE_IMAGES.beauty;
-  else if(textLower.includes('клиник') || textLower.includes('врач') || textLower.includes('стоматолог') || textLower.includes('медицин')) pool = CURATED_NICHE_IMAGES.medical;
-
-  let imgIdx = 0;
-  // Заменяем битые или выдуманные фото-плейсхолдеры на 100% реальные фото
-  let res = html.replace(/src=["'](https?:\/\/[^"']*(?:via\.placeholder|placeholder|photo-xxx|example|source\.unsplash|images\.unsplash\.com\/photo-[a-z0-9_-]{0,10}\?|unsplash\.com\/photos\/[^"']*)[^"']*)["']/gi, function(match){
-    const picked = pool[imgIdx % pool.length];
-    imgIdx++;
-    return `src="${picked}"`;
-  });
-
-  // Добавляем автоматический fallback на каждый img тег
-  res = res.replace(/<img\b([^>]*?)>/gi, function(match, attributes){
-    if(attributes.includes('onerror')) return match;
-    const fallback = pool[0];
-    return `<img ${attributes} onerror="this.onerror=null;this.src='${fallback}';">`;
-  });
-
-  return res;
-}
-
-function cleanHtmlCode(raw){
-  if(!raw) return '';
-  let match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
-  let cleaned = match ? match[0].trim() : raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-  return enrichHtmlImages(cleaned);
+  let html = j.choices[0].message.content;
+  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+  return html;
 }
 
 // ---------- Generate ----------
@@ -1123,81 +1385,17 @@ function copyCode(){
   navigator.clipboard.writeText(currentHtml);
   toast('Код скопирован!', '📋');
 }
-
 function downloadSite(){
-  if(!currentHtml){
-    toast('Сначала сгенерируйте сайт!', '⚠️');
-    return;
-  }
-  try{
-    const rawName = document.getElementById('siteName')?.value || 'site';
-    const siteName = rawName.trim().replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_') || 'website';
-    const filename = `${siteName}.html`;
-    const blob = new Blob([currentHtml], {type: 'text/html;charset=utf-8'});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(()=>{
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 400);
-    toast(`Файл ${filename} успешно скачан! ⬇`, '✅');
-  }catch(e){
-    toast('Ошибка скачивания: ' + e.message, '❌');
-  }
-}
-
-function copyCode(){
   if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  if(navigator.clipboard && window.isSecureContext){
-    navigator.clipboard.writeText(currentHtml).then(()=>{
-      toast('Код скопирован в буфер! 📋', '✅');
-    }).catch(()=>{
-      fallbackCopy(currentHtml);
-    });
-  } else {
-    fallbackCopy(currentHtml);
-  }
+  const blob = new Blob([currentHtml], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${(document.getElementById('siteName').value || 'site').replace(/\s+/g,'-').toLowerCase()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Скачан!', '⬇');
 }
-
-function fallbackCopy(text){
-  const ta = document.createElement('textarea');
-  ta.value = text;
-  ta.style.position = 'fixed';
-  ta.style.opacity = '0';
-  document.body.appendChild(ta);
-  ta.select();
-  try{
-    document.execCommand('copy');
-    toast('Код скопирован! 📋', '✅');
-  }catch(e){
-    toast('Не удалось скопировать', '❌');
-  }
-  document.body.removeChild(ta);
-}
-
-function openPricingModal(){
-  const m = document.getElementById('pricingModal');
-  if(m) m.classList.remove('hidden');
-}
-
-function selectTariff(name){
-  toast(`Выбран тариф: ${name}`, '💳');
-  setTimeout(()=>{
-    alert(`Оплата тарифа "${name}". Здесь подключается платёжный шлюз (ЮKassa / Robokassa). Вы можете скачать сайт прямо сейчас по кнопке "Скачать" в панели!`);
-  }, 200);
-}
-
-function actualDownloadSite(){
-  const m = document.getElementById('pricingModal');
-  if(m) m.classList.add('hidden');
-  downloadSite();
-}
-
-
 function openInNewTab(){
   if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
   const w = window.open();
@@ -1252,7 +1450,7 @@ async function sendChat(){
     const newHtml = await callRefineAPI(currentHtml, msg);
     document.getElementById('typing')?.remove();
     renderPreview(newHtml);
-    addChatMessage('assistant', `Готово! Внёс правки: «${msg}». Проверьте обновленный сайт в окне предпросмотра! ✨`);
+    addChatMessage('assistant', 'Готово! Исправил. Что еще улучшить?');
     toast('Сайт обновлен!', '✦');
   }catch(e){
     document.getElementById('typing')?.remove();
@@ -1309,133 +1507,48 @@ function insertImage(url){
 }
 
 async function generateImage(){
-  const promptInput = document.getElementById('imagePrompt');
-  const prompt = promptInput.value.trim();
-  if(!prompt) return toast('Опишите, какую картинку нарисовать', '⚠️');
+  const prompt = document.getElementById('imagePrompt').value.trim();
+  if(!prompt) return toast('Опиши что сгенерить', '⚠️');
   
   const apiKey = getKey();
   if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
   
-  const genBtn = event?.currentTarget || document.querySelector('button[onclick*="generateImage"]');
-  if(genBtn) {
-    genBtn.disabled = true;
-    genBtn.innerHTML = '⏳ 0s';
-  }
+  toast('Генерю картинку... 10-20 сек', '🎨');
   
-  toast('Нейросеть рисует картинку (~10-25 сек)...', '🎨');
-  
-  const startTime = Date.now();
-  const timerInterval = setInterval(()=>{
-    const s = Math.floor((Date.now() - startTime)/1000);
-    if(genBtn) genBtn.innerHTML = `⏳ ${s}s`;
-  }, 1000);
-  
-  const cont = document.getElementById('imageResults');
-  cont.classList.remove('hidden');
-  const placeholderId = 'loading_img_' + Date.now();
-  cont.insertAdjacentHTML('afterbegin', `
-    <div id="${placeholderId}" class="col-span-3 rounded-xl p-4 bg-white/5 border border-[#6C5CFF]/30 text-center flex flex-col items-center justify-center gap-2">
-      <div class="w-7 h-7 border-2 border-[#6C5CFF] border-t-transparent rounded-full animate-spin"></div>
-      <div class="text-[12px] text-white/80 font-medium">Нейросеть генерирует: "${prompt.slice(0,35)}..."</div>
-      <div class="text-[11px] text-white/40">Обычно занимает от 10 до 20 секунд</div>
-    </div>
-  `);
-
   try{
-    let imageUrl = null;
-    
-    // 1. Попробуем через бэкенд
+    // Try backend
+    let result;
     try{
-      const res = await fetch('/api/generate-image', {
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({prompt, api_key: apiKey})
-      });
-      if(res.ok){
-        const j = await res.json();
-        if(j.url && !j.fallback) imageUrl = j.url;
-      }
-    }catch(err){ console.log('Backend image gen fallback to direct', err); }
+      const res = await fetch('/api/generate-image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, api_key: apiKey})});
+      if(res.ok) result = await res.json();
+    }catch{}
     
-    // 2. Если бэкенд недоступен, вызываем Polza AI напрямую
-    if(!imageUrl){
-      const initRes = await fetch('https://polza.ai/api/v1/images/generations', {
+    if(!result || result.fallback){
+      // Direct
+      const resp = await fetch('https://polza.ai/api/v1/images/generations', {
         method:'POST',
-        headers:{
-          'Content-Type':'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: 'bytedance/seedream-4.5',
-          prompt: prompt,
-          size: '1:1',
-          n: 1
-        })
+        headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+        body: JSON.stringify({model:'bytedance/seedream-4.5', prompt, size:'1024x1024', n:1})
       });
-      
-      if(!initRes.ok){
-        const errData = await initRes.text();
-        throw new Error(`Ошибка Polza: ${errData.slice(0, 200)}`);
-      }
-      
-      const initData = await initRes.json();
-      const reqId = initData.requestId || initData.id;
-      
-      if(!reqId && initData.data?.[0]?.url){
-        imageUrl = initData.data[0].url;
-      } else if(reqId){
-        // Опрос статуса генерации
-        for(let i=0; i<25; i++){
-          await new Promise(r => setTimeout(r, 2000));
-          const checkRes = await fetch(`https://polza.ai/api/v1/images/${reqId}`, {
-            headers: {'Authorization': `Bearer ${apiKey}`}
-          });
-          if(checkRes.ok){
-            const checkData = await checkRes.json();
-            if(checkData.status === 'COMPLETED'){
-              imageUrl = checkData.url || checkData.images?.[0];
-              break;
-            } else if(checkData.status === 'FAILED' || checkData.status === 'ERROR'){
-              throw new Error('Генерация отклонена нейросетью');
-            }
-          }
-        }
-      }
+      if(!resp.ok) throw new Error('Image gen failed, попробуй другую модель');
+      result = await resp.json();
+      result.url = result.data?.[0]?.url;
     }
     
-    clearInterval(timerInterval);
-    document.getElementById(placeholderId)?.remove();
-    if(genBtn){ genBtn.disabled = false; genBtn.innerHTML = '✦ Gen'; }
-
-    if(!imageUrl){
-      throw new Error('Время ожидания картинки истекло, попробуйте еще раз');
+    if(result.url){
+      const cont = document.getElementById('imageResults');
+      cont.classList.remove('hidden');
+      cont.innerHTML = `<div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/30">
+        <img src="${result.url}" class="w-full aspect-square object-cover">
+        <div class="p-2 flex gap-2">
+          <button onclick="insertImage('${result.url}')" class="flex-1 btn-primary py-1.5 rounded-lg text-[11px] text-white">Вставить в сайт</button>
+          <a href="${result.url}" target="_blank" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px]">Открыть</a>
+        </div>
+      </div>` + cont.innerHTML;
+      toast('Картинка готова!', '✦');
     }
-    
-    // Показываем готовую картинку
-    cont.insertAdjacentHTML('afterbegin', `
-      <div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/40 bg-[#0F1320] p-2 space-y-2 group shadow-lg">
-        <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40">
-          <img src="${imageUrl}" class="w-full h-full object-cover">
-        </div>
-        <div class="text-[11px] text-white/70 truncate px-1">🎨 ${prompt}</div>
-        <div class="flex gap-2">
-          <button onclick="insertImage('${imageUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
-            <span>✦</span> Вставить в сайт
-          </button>
-          <a href="${imageUrl}" target="_blank" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
-            Открыть ↗
-          </a>
-        </div>
-      </div>
-    `);
-    
-    toast('Картинка успешно нарисована! 🎨', '✅');
   }catch(e){
-    clearInterval(timerInterval);
-    document.getElementById(placeholderId)?.remove();
-    if(genBtn){ genBtn.disabled = false; genBtn.innerHTML = '✦ Gen'; }
     toast(e.message, '❌');
-    console.error('Image Gen error:', e);
   }
 }
 
@@ -1482,8 +1595,8 @@ function renderHistory(){
 }
 renderHistory();
 
-// Load saved key (or default working key)
-const savedKey = localStorage.getItem('polza_key') || 'pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4';
+// Load saved key
+const savedKey = localStorage.getItem('polza_key');
 if(savedKey){
   document.getElementById('polzaKey').value = savedKey;
   const m = document.getElementById('polzaKeyMobile');
@@ -1523,807 +1636,196 @@ setTimeout(checkKeyOnStart, 800);
   }
 });
 
-// ---------- Secure Owner Mode (SHA-256 Protected) ----------
-const VALID_OWNER_HASHES = ['145c8a34ce62ef8e954c8be437cd9f806e82e0f94c8c01af8bcd79a09ee7ba15', '882d5a30a7824356c4ca69b8510834008fae230ff744d52ab578150485302047'];
-let logoClicks = 0;
-let logoTimer = null;
-
-async function sha256Hex(message) {
-  if (window.crypto && crypto.subtle) {
-    const msgBuffer = new TextEncoder().encode(message);
-    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  }
-  return fallbackSha256(message);
-}
-
-function fallbackSha256(ascii) {
-  function rightRotate(value, amount) { return (value>>>amount) | (value<<(32 - amount)); }
-  const mathPow = Math.pow, maxWord = mathPow(2, 32);
-  let lengthProperty = 'length', i, j, result = '';
-  const words = [], asciiBitLength = ascii[lengthProperty] * 8;
-  let hash = [0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19];
-  const k = [0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0x0bef9a3f, 0xc67178f2];
-  ascii += '\x80';
-  while (ascii[lengthProperty] % 64 - 56) ascii += '\x00';
-  for (i = 0; i < ascii[lengthProperty]; i++) {
-    j = ascii.charCodeAt(i);
-    words[i>>2] |= j << ((3 - i)%4)*8;
-  }
-  words[words[lengthProperty]] = ((asciiBitLength/maxWord)|0);
-  words[words[lengthProperty]] = (asciiBitLength);
-  for (j = 0; j < words[lengthProperty];) {
-    const w = words.slice(j, j += 16);
-    const oldHash = hash;
-    hash = hash.slice(0, 8);
-    for (i = 0; i < 64; i++) {
-      const i2 = i + j;
-      const w15 = w[i - 15], w2 = w[i - 2];
-      const a = hash[0], e = hash[4];
-      const temp1 = hash[7] + (rightRotate(e, 6) ^ rightRotate(e, 11) ^ rightRotate(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] + (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rightRotate(w15, 7) ^ rightRotate(w15, 18) ^ (w15>>>3)) + w[i - 7] + (rightRotate(w2, 17) ^ rightRotate(w2, 19) ^ (w2>>>10)))|0);
-      const temp2 = (rightRotate(a, 2) ^ rightRotate(a, 13) ^ rightRotate(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
-      hash = [(temp1 + temp2)|0, a, hash[1], hash[2], (hash[3] + temp1)|0, hash[4], hash[5], hash[6]];
-    }
-    for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i])|0;
-  }
-  for (i = 0; i < 8; i++) {
-    for (let b = 3; b >= 0; b--) {
-      const byte = (hash[i] >> (8 * b)) & 255;
-      result += (byte < 16 ? '0' : '') + byte.toString(16);
-    }
-  }
-  return result;
-}
-
-function checkIsOwner() {
-  return VALID_OWNER_HASHES.includes(localStorage.getItem('neurasite_owner_token'));
-}
-
-function updateOwnerUI() {
-  const isOwner = checkIsOwner();
-  const ownerBadge = document.getElementById('ownerBadge');
-  const versionBadge = document.getElementById('versionBadge');
-  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
-  const ownerBtn = document.getElementById('ownerStatusBtn');
-  
-  if (ownerBadge && versionBadge) {
-    if (isOwner) {
-      ownerBadge.classList.remove('hidden');
-      versionBadge.classList.add('hidden');
-      if (tariffsBtn) tariffsBtn.classList.add('hidden');
-      if (ownerBtn) ownerBtn.classList.remove('hidden');
-    } else {
-      ownerBadge.classList.add('hidden');
-      versionBadge.classList.remove('hidden');
-      if (tariffsBtn) tariffsBtn.classList.remove('hidden');
-      if (ownerBtn) ownerBtn.classList.add('hidden');
-    }
-  }
-}
-
-function toggleOwnerPinVisibility() {
-  const inp = document.getElementById('ownerPinInput');
-  if (inp) inp.type = inp.type === 'password' ? 'text' : 'password';
-}
-
-function handleLogoClick() {
-  logoClicks++;
-  clearTimeout(logoTimer);
-  logoTimer = setTimeout(() => { logoClicks = 0; }, 1500);
-  
-  if (logoClicks >= 3) {
-    logoClicks = 0;
-    openOwnerModal();
-  }
-}
-
-function openOwnerModal() {
-  if (checkIsOwner()) {
-    if (confirm('👑 Режим владельца АКТИВЕН (полный безлимит).\n\nХотите выйти из режима владельца?')) {
-      localStorage.removeItem('neurasite_owner_token');
-      updateOwnerUI();
-      toast('Вы вышли из режима владельца', 'ℹ️');
-    }
-    return;
-  }
-  const modal = document.getElementById('ownerPinModal');
-  const inp = document.getElementById('ownerPinInput');
-  const err = document.getElementById('ownerPinError');
-  if (inp) inp.value = '';
-  if (err) err.classList.add('hidden');
-  if (modal) modal.classList.remove('hidden');
-  setTimeout(() => { inp?.focus(); }, 200);
-}
-
-async function verifyOwnerPin() {
-  const inp = document.getElementById('ownerPinInput');
-  const err = document.getElementById('ownerPinError');
-  const val = (inp?.value || '').trim();
-  
-  const lockUntil = parseInt(localStorage.getItem('owner_lock_until') || '0');
-  const now = Date.now();
-  if (lockUntil > now) {
-    const minLeft = Math.ceil((lockUntil - now) / 60000);
-    if (err) {
-      err.textContent = 'Слишком много попыток. Вход заблокирован на ' + minLeft + ' мин.';
-      err.classList.remove('hidden');
-    }
-    return;
-  }
-
-  if (!val) {
-    if (err) { err.textContent = 'Введите пароль'; err.classList.remove('hidden'); }
-    return;
-  }
-
-  const hash = await sha256Hex(val);
-  if (VALID_OWNER_HASHES.includes(hash)) {
-    localStorage.setItem('neurasite_owner_token', hash);
-    localStorage.removeItem('owner_failed_tries');
-    document.getElementById('ownerPinModal').classList.add('hidden');
-    updateOwnerUI();
-    toast('👑 Режим владельца активирован! Полный безлимит.', '✨');
-  } else {
-    let tries = parseInt(localStorage.getItem('owner_failed_tries') || '0') + 1;
-    localStorage.setItem('owner_failed_tries', String(tries));
-    if (tries >= 4) {
-      localStorage.setItem('owner_lock_until', String(Date.now() + 300000));
-      if (err) { err.textContent = 'Неверный пароль. Вход заблокирован на 5 минут.'; err.classList.remove('hidden'); }
-    } else {
-      if (err) { err.textContent = 'Неверный пароль. Осталось попыток: ' + (4 - tries); err.classList.remove('hidden'); }
-    }
-    inp?.classList.add('border-red-500');
-    setTimeout(() => { inp?.classList.remove('border-red-500'); }, 1500);
-  }
-}
-
-// Check URL param ?admin=... or ?pwd=...
-(async function checkAdminParam() {
-  const params = new URLSearchParams(window.location.search);
-  const paramVal = params.get('admin') || params.get('pin') || params.get('pwd') || params.get('owner');
-  if (paramVal) {
-    const hash = await sha256Hex(paramVal.trim());
-    if (VALID_OWNER_HASHES.includes(hash)) {
-      localStorage.setItem('neurasite_owner_token', hash);
-      toast('👑 Доступ владельца подтвержден через ссылку!', '✨');
-    }
-  }
-  updateOwnerUI();
-})();
-
-// Limit check for guests before generate
-const baseGenerateSite = generateSite;
-generateSite = async function() {
-  if (!checkIsOwner()) {
-    const guestGens = parseInt(localStorage.getItem('guest_gens') || '0');
-    if (guestGens >= 1) {
-      openPricingModal();
-      toast('Бесплатная попытка использована. Выберите тариф!', '💳');
-      return;
-    }
-    localStorage.setItem('guest_gens', String(guestGens + 1));
-  }
-  return baseGenerateSite();
-};
-
-
-// ---------- Deploy & Publishing Functions ----------
-function openDeployModal(){
-  if(!currentHtml){
-    toast('Сначала сгенерируйте сайт!', '⚠️');
-    return;
-  }
-  const siteName = document.getElementById('siteName')?.value || 'my-site';
-  const slug = siteName.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/-+/g, '-').slice(0, 25);
-  const slugInput = document.getElementById('publishSlug');
-  if(slugInput && !slugInput.value) slugInput.value = slug;
-  
-  const repoInput = document.getElementById('clientGhRepo');
-  if(repoInput && !repoInput.value) repoInput.value = slug;
-  
-  document.getElementById('deployModal').classList.remove('hidden');
-}
-
-async function publishInstantLink(){
-  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
-  const slug = (document.getElementById('publishSlug')?.value || '').trim();
-  const siteName = document.getElementById('siteName')?.value || 'Site';
-  const btn = document.getElementById('publishBtn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Публикую...';
-
-  try{
-    // Try backend publish
-    const res = await fetch('/api/publish', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({html: currentHtml, slug: slug, site_name: siteName})
-    });
-    
-    let liveUrl = '';
-    if(res.ok){
-      const data = await res.json();
-      liveUrl = data.full_url || (window.location.origin + data.path);
-    } else {
-      // Fallback: create blob URL or share URL
-      const blob = new Blob([currentHtml], {type: 'text/html'});
-      liveUrl = URL.createObjectURL(blob);
-    }
-
-    const resBox = document.getElementById('publishResult');
-    resBox.classList.remove('hidden');
-    document.getElementById('publishedUrlInput').value = liveUrl;
-    document.getElementById('publishedUrlLink').href = liveUrl;
-    toast('Сайт успешно опубликован! 🚀', '✅');
-  }catch(e){
-    toast('Ошибка публикации: ' + e.message, '❌');
-  }finally{
-    btn.disabled = false;
-    btn.innerHTML = '<span>🚀</span> Опубликовать';
-  }
-}
-
-function copyPublishedUrl(){
-  const url = document.getElementById('publishedUrlInput').value;
-  if(!url) return;
-  if(navigator.clipboard && window.isSecureContext){
-    navigator.clipboard.writeText(url).then(()=>toast('Ссылка скопирована! 📋', '✅')).catch(()=>fallbackCopy(url));
-  } else {
-    fallbackCopy(url);
-  }
-}
-
-function downloadHostingZip(){
-  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
-  if(typeof JSZip === 'undefined'){
-    return toast('Библиотека ZIP загружается, подождите пару секунд...', '⏳');
-  }
-
-  const siteName = (document.getElementById('siteName')?.value || 'site').trim().replace(/[^a-zA-Zа-яА-Я0-9_-]/g, '_');
-  const zip = new JSZip();
-
-  // 1. index.html
-  zip.file("index.html", currentHtml);
-
-  // 2. robots.txt
-  const robots = "User-agent: *\nAllow: /\n\nSitemap: https://" + siteName + ".ru/sitemap.xml";
-  zip.file("robots.txt", robots);
-
-  // 3. sitemap.xml
-  const today = new Date().toISOString().split('T')[0];
-  const sitemap = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url>\n    <loc>https://' + siteName + '.ru/</loc>\n    <lastmod>' + today + '</lastmod>\n    <changefreq>weekly</changefreq>\n    <priority>1.0</priority>\n  </url>\n</urlset>';
-  zip.file("sitemap.xml", sitemap);
-
-  // 4. Instructions
-  const instruct = "КАК ЗАГРУЗИТЬ САЙТ НА ХОСТИНГ (Beget, Timeweb, Reg.ru)\n==================================================\n\n1. Зайдите в панель управления вашего хостинга (например, cp.beget.com).\n2. Откройте «Файловый менеджер» (File Manager).\n3. Перейдите в папку вашего сайта:\n   - На Beget: /ваш_домен/public_html/\n   - На Timeweb: /public_html/\n4. Нажмите кнопку «Загрузить файлы» и загрузите файлы из этого архива:\n   - index.html\n   - robots.txt\n   - sitemap.xml\n5. Всё готово! Сайт начнет открываться по вашему домену сразу же.\n";
-  zip.file("ИНСТРУКЦИЯ_ПО_ЗАГРУЗКЕ.txt", instruct);
-
-  // Generate ZIP
-  toast('Формирую ZIP-архив для хостинга... 📦', '⏳');
-  zip.generateAsync({type:"blob"}).then(function(content){
-    const a = document.createElement('a');
-    const url = URL.createObjectURL(content);
-    a.href = url;
-    a.download = siteName + '_hosting_pack.zip';
-    document.body.appendChild(a);
-    a.click();
-    setTimeout(function(){
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }, 500);
-    toast('Архив ' + siteName + '_hosting_pack.zip скачан! 📦', '✅');
-  });
-}
-
-async function deployToClientGitHub(){
-  if(!currentHtml) return toast('Сначала сгенерируйте сайт!', '⚠️');
-  const token = (document.getElementById('clientGhToken')?.value || '').trim();
-  const repo = (document.getElementById('clientGhRepo')?.value || '').trim().replace(/[^a-zA-Z0-9_-]/g, '-');
-  
-  if(!token){
-    toast('Введите ваш GitHub токен (Personal Access Token)', '⚠️');
-    return;
-  }
-  if(!repo){
-    toast('Укажите имя для репозитория', '⚠️');
-    return;
-  }
-
-  const btn = document.getElementById('clientGhBtn');
-  const resBox = document.getElementById('clientGhResult');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Создаю репозиторий на вашем GitHub...';
-  resBox.classList.remove('hidden');
-  resBox.innerHTML = '<div class="text-[#8B7DFF]">1. Проверяю токен и создаю репозиторий...</div>';
-
-  try{
-    const userRes = await fetch('https://api.github.com/user', {
-      headers: {'Authorization': 'token ' + token}
-    });
-    if(!userRes.ok) throw new Error('Неверный GitHub токен. Проверьте права токена (нужна галочка repo).');
-    const userData = await userRes.json();
-    const username = userData.login;
-
-    resBox.innerHTML = '<div class="text-[#8B7DFF]">2. Создаю репозиторий ' + username + '/' + repo + '...</div>';
-    const createRes = await fetch('https://api.github.com/user/repos', {
-      method: 'POST',
-      headers: {'Authorization': 'token ' + token, 'Content-Type': 'application/json'},
-      body: JSON.stringify({name: repo, auto_init: true, description: 'Website created with NeuraSite AI'})
-    });
-    
-    await new Promise(function(r){ setTimeout(r, 2000); });
-
-    resBox.innerHTML = '<div class="text-[#8B7DFF]">3. Загружаю index.html в ветку main...</div>';
-    const contentB64 = btoa(unescape(encodeURIComponent(currentHtml)));
-    
-    let sha = null;
-    try{
-      const fCheck = await fetch('https://api.github.com/repos/' + username + '/' + repo + '/contents/index.html', {
-        headers: {'Authorization': 'token ' + token}
-      });
-      if(fCheck.ok){
-        const fData = await fCheck.json();
-        sha = fData.sha;
-      }
-    }catch(e){}
-
-    const putRes = await fetch('https://api.github.com/repos/' + username + '/' + repo + '/contents/index.html', {
-      method: 'PUT',
-      headers: {'Authorization': 'token ' + token, 'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        message: 'feat: publish website via NeuraSite AI',
-        content: contentB64,
-        sha: sha || undefined
-      })
-    });
-    if(!putRes.ok) throw new Error('Не удалось загрузить index.html: ' + await putRes.text());
-
-    resBox.innerHTML = '<div class="text-[#8B7DFF]">4. Включаю GitHub Pages...</div>';
-    try{
-      await fetch('https://api.github.com/repos/' + username + '/' + repo + '/pages', {
-        method: 'POST',
-        headers: {'Authorization': 'token ' + token, 'Accept': 'application/vnd.github.v3+json'},
-        body: JSON.stringify({source: {branch: 'main', path: '/'}})
-      });
-    }catch(e){}
-
-    const pagesUrl = 'https://' + username + '.github.io/' + repo + '/';
-    resBox.innerHTML = '<div class="text-[#00D492] font-bold">✓ Успешно выгружено в ваш GitHub!</div>' +
-      '<div class="text-white/80">Репозиторий: <a href="https://github.com/' + username + '/' + repo + '" target="_blank" class="underline text-[#8B7DFF]">' + username + '/' + repo + '</a></div>' +
-      '<div class="text-white/80">Ваш сайт (через 1-2 мин): <a href="' + pagesUrl + '" target="_blank" class="underline text-[#00D492] font-bold">' + pagesUrl + '</a></div>';
-    toast('Сайт выгружен в ваш GitHub! 🚀', '✅');
-  }catch(e){
-    resBox.innerHTML = '<div class="text-red-400 font-bold">Ошибка: ' + e.message + '</div>';
-    toast(e.message, '❌');
-  }finally{
-    btn.disabled = false;
-    btn.innerHTML = '<span>🚀</span> Создать репозиторий и опубликовать на GitHub';
-  }
-}
-
-
-// ---------- Голосовой ввод ----------
-let activeRec = null;
-let baseTextVoice = '';
-
+// ---------- Voice Input (Голосовой ввод) ----------
+let currentSpeechRec = null;
 function startVoiceInput(inputId, btnId){
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRec) return toast('Голосовой ввод не поддерживается браузером', '⚠️');
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if(!SpeechRecognition){
+    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
+  }
 
   const btn = document.getElementById(btnId);
   const input = document.getElementById(inputId);
-  if(!input) return;
+  if(!btn || !input) return;
 
-  if(activeRec){
-    try { activeRec.stop(); } catch(e){}
-    activeRec = null;
-    if(btn) btn.innerHTML = '🎙️ Голосом';
+  if(btn.dataset.recording === 'true'){
+    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
+    btn.dataset.recording = 'false';
+    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    toast('Запись остановлена', '⏹');
     return;
   }
 
-  const rec = new SpeechRec();
-  rec.lang = 'ru-RU';
-  rec.continuous = false;
-  rec.interimResults = false;
-  activeRec = rec;
-  baseTextVoice = input.value.trim();
+  try{
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'ru-RU';
+    recognition.continuous = false;
+    recognition.interimResults = false;
 
-  if(btn) btn.innerHTML = '🔴 Говорите...';
+    recognition.onstart = () => {
+      btn.dataset.recording = 'true';
+      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
+      toast('Слушаю вас... Говорите', '🎙️');
+    };
 
-  rec.onresult = function(e){
-    const transcript = e.results[0][0].transcript.trim();
-    input.value = baseTextVoice ? baseTextVoice + ' ' + transcript : transcript;
-    input.dispatchEvent(new Event('input'));
-  };
+    recognition.onresult = (event) => {
+      const text = event.results[0][0].transcript;
+      if(text){
+        input.value = input.value ? (input.value + ' ' + text) : text;
+        toast('Распознано!', '✓');
+      }
+    };
 
-  rec.onerror = function(){
-    if(btn) btn.innerHTML = '🎙️ Голосом';
-    activeRec = null;
-  };
+    recognition.onerror = (e) => {
+      console.log('Speech error', e);
+      toast('Не удалось распознать голос', '⚠️');
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
 
-  rec.onend = function(){
-    if(btn) btn.innerHTML = '🎙️ Голосом';
-    activeRec = null;
-  };
+    recognition.onend = () => {
+      btn.dataset.recording = 'false';
+      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    };
 
-  try { rec.start(); } catch(e){ activeRec = null; }
+    currentSpeechRec = recognition;
+    recognition.start();
+  }catch(e){
+    toast('Ошибка микрофона: ' + e.message, '⚠️');
+  }
 }
 
-// ---------- Фотошоп ----------
-let uploadedPhotoBase64 = null;
+// ---------- Photoshop & Media Tools ----------
+let currentUserPhotoBase64 = null;
 
 function switchImgTool(tool){
   ['photoshop', 'generate', 'search'].forEach(t => {
-    const tab = document.getElementById('toolTab' + (t === 'generate' ? 'Gen' : (t === 'photoshop' ? 'Photoshop' : 'Search')));
-    const panel = document.getElementById('toolPanel' + (t === 'generate' ? 'Generate' : (t === 'photoshop' ? 'Photoshop' : 'Search')));
-    if(tab && panel){
+    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
+    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
+    if(panel) panel.classList.toggle('hidden', t !== tool);
+    if(tab){
       if(t === tool){
         tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
-        panel.classList.remove('hidden');
       } else {
         tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
-        panel.classList.add('hidden');
       }
     }
   });
 }
 
-function handleUserPhotoSelected(e){
-  const file = e.target.files?.[0];
+function handleUserPhotoSelected(event){
+  const file = event.target.files[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = function(ev){
-    uploadedPhotoBase64 = ev.target.result;
-    document.getElementById('uploadPromptBox')?.classList.add('hidden');
-    const pBox = document.getElementById('uploadedPreviewBox');
-    if(pBox){ pBox.classList.remove('hidden'); pBox.classList.add('flex'); }
-    const th = document.getElementById('uploadedThumb');
-    if(th) th.src = uploadedPhotoBase64;
-    toast('Фото выбрано! Опишите задачу и нажмите «Изменить»', '📸');
+  reader.onload = function(e){
+    currentUserPhotoBase64 = e.target.result;
+    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
+    document.getElementById('photoshopFileName').textContent = file.name;
+    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
+    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
+    toast('Фото загружено!', '✓');
   };
   reader.readAsDataURL(file);
 }
 
 async function applyAiPhotoshop(){
-  const editPrompt = (document.getElementById('photoshopPrompt')?.value || '').trim();
-  if(!uploadedPhotoBase64){
-    toast('Сначала загрузите фотографию выше 📷', '⚠️');
-    document.getElementById('userPhotoInput')?.click();
-    return;
+  if(!currentUserPhotoBase64){
+    return toast('Сначала загрузите фотографию!', '⚠️');
   }
-  if(!editPrompt){
-    toast('Опишите, что изменить (например: убери бороду) ✏️', '⚠️');
-    document.getElementById('photoshopPrompt')?.focus();
-    return;
+  const prompt = document.getElementById('photoshopPrompt').value.trim();
+  if(!prompt){
+    return toast('Напишите, что изменить на фото', '⚠️');
   }
-
   const apiKey = getKey();
+  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
+
   const btn = document.getElementById('aiPhotoshopBtn');
-  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Обработка...'; }
+  btn.disabled = true;
+  btn.innerHTML = '⏳ Обработка...';
   toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
 
   try {
-    const fullPrompt = 'Photo editing: ' + editPrompt + '. Strictly keep the exact same person, face, clothes, lighting, and background from the input photo. High quality realistic photo retouch.';
+    const fullPrompt = 'Professional web design photo editing: ' + prompt;
+    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
     
-    // Direct Polza Media API
-    const res = await fetch('https://polza.ai/api/v1/media', {
+    const resp = await fetch('https://polza.ai/api/v1/media', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer ' + apiKey
+        'Authorization': `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash-image',
         input: {
           prompt: fullPrompt,
-          images: [{ type: 'base64', data: uploadedPhotoBase64 }],
-          aspect_ratio: '1:1'
+          images: [{ type: 'base64', data: base64Data }]
         }
       })
     });
 
-    if(!res.ok){
-      const err = await res.text();
-      throw new Error(err.slice(0, 150));
+    if(!resp.ok){
+      const err = await resp.text();
+      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
     }
 
-    const data = await res.json();
-    let url = data.data?.[0]?.url || data.data?.url;
+    const data = await resp.json();
+    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
+    const mediaId = data.id || data.request_id || data.requestId;
 
-    if(!url && data.id){
-      for(let i=0; i<20; i++){
+    if(!resultUrl && mediaId){
+      for(let i = 0; i < 20; i++){
         await new Promise(r => setTimeout(r, 2000));
-        const stRes = await fetch('https://polza.ai/api/v1/media/' + data.id, {
-          headers: { 'Authorization': 'Bearer ' + apiKey }
+        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
+          headers: { 'Authorization': `Bearer ${apiKey}` }
         });
-        if(stRes.ok){
-          const st = await stRes.json();
-          if(st.status === 'completed'){
-            url = st.data?.[0]?.url || st.data?.url;
+        if(st.ok){
+          const sj = await st.json();
+          if(sj.status === 'completed' || sj.status === 'succeeded'){
+            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
             break;
           }
         }
       }
     }
 
-    if(!url) throw new Error('Не удалось получить фото. Попробуйте еще раз.');
-
-    const cont = document.getElementById('imageResults');
-    cont.classList.remove('hidden');
-    cont.insertAdjacentHTML('afterbegin', `
-      <div class="col-span-3 rounded-xl overflow-hidden border border-[#FF4D8D]/40 bg-[#0F1320] p-2 space-y-2 group shadow-xl">
-        <div class="flex items-center justify-between text-[11px] text-white/70">
-          <span class="font-bold text-[#FF4D8D]">🪄 Отредактировано</span>
-          <span class="text-white/40">${editPrompt}</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="aspect-square rounded-lg overflow-hidden bg-black/40"><img src="${uploadedPhotoBase64}" class="w-full h-full object-cover"></div>
-          <div class="aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#00D492]"><img src="${url}" class="w-full h-full object-cover"></div>
-        </div>
-        <div class="flex gap-2">
-          <button onclick="insertImage('${url}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white">✦ Вставить в сайт</button>
-          <a href="${url}" target="_blank" download class="btn-ghost px-3 py-2 rounded-lg text-[11px] text-white/80">Открыть ↗</a>
-        </div>
-      </div>
-    `);
-    toast('Фото готово! 🪄', '✅');
+    if(resultUrl){
+      insertImage(resultUrl);
+      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
+    } else {
+      toast('Готово! Изображение обработано', '✓');
+    }
   } catch(e) {
-    toast(e.message, '❌');
+    toast('Ошибка фотошопа: ' + e.message, '⚠️');
   } finally {
-    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
+    btn.disabled = false;
+    btn.innerHTML = '🪄 Изменить';
   }
 }
 
+// ---------- Owner Unlimited Authentication ----------
+function checkOwnerAuth(){
+  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
+  const badge = document.getElementById('ownerStatusBadge');
+  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
+  if(badge) badge.classList.toggle('hidden', !isOwner);
+  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
+}
+
+function verifyOwnerPassword(pass){
+  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
+    localStorage.setItem('neurasite_owner', 'true');
+    checkOwnerAuth();
+    toast('Режим владельца активирован: Безлимит! 👑', '👑');
+    document.getElementById('ownerPinModal')?.classList.add('hidden');
+    return true;
+  }
+  return false;
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  checkOwnerAuth();
+});
+
 </script>
-
-<!-- Templates Modal -->
-<div id="templatesModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-  <div class="glass-strong rounded-[24px] max-w-[800px] w-full p-6 max-h-[85vh] overflow-y-auto border border-white/10">
-    <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-xl bg-[#6C5CFF]/20 flex items-center justify-center text-[18px]">⚡</div>
-        <div>
-          <h2 class="font-space font-bold text-[18px]">Готовые шаблоны сайтов</h2>
-          <p class="text-[12px] text-white/50">Выбери готовый шаблон ниши — поля заполнятся в 1 клик</p>
-        </div>
-      </div>
-      <button onclick="document.getElementById('templatesModal').classList.add('hidden')" class="w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white">✕</button>
-    </div>
-    <div id="templatesGrid" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-    </div>
-  </div>
-</div>
-
-
-<!-- Pricing Modal (Тарифы) -->
-<div id="pricingModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-  <div class="glass-strong rounded-[24px] max-w-[850px] w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto border border-white/10 relative">
-    <button onclick="document.getElementById('pricingModal').classList.add('hidden')" class="absolute top-5 right-5 w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition">✕</button>
-
-    <div class="text-center max-w-[500px] mx-auto mb-8">
-      <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#6C5CFF]/15 border border-[#6C5CFF]/30 text-[#8B7DFF] text-[12px] font-mono mb-3">
-        ⚡ ДОСТУП К СКАЧИВАНИЮ И КОДУ
-      </div>
-      <h2 class="font-space font-bold text-[24px] sm:text-[28px] text-white">Тарифы на генерацию</h2>
-      <p class="text-white/60 text-[13px] sm:text-[14px] mt-1">Выберите подходящий пакет для скачивания готового сайта с чистым кодом и анимациями</p>
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-      <!-- 1 Site -->
-      <div class="glass p-5 rounded-2xl border border-white/10 flex flex-col justify-between hover:border-[#6C5CFF]/40 transition">
-        <div>
-          <div class="text-[12px] text-white/50 font-mono uppercase tracking-wider mb-1">Разовый</div>
-          <h3 class="font-space font-bold text-[20px] text-white mb-2">1 Сайт</h3>
-          <div class="flex items-baseline gap-1 mb-4">
-            <span class="text-[28px] font-extrabold text-white">490</span>
-            <span class="text-[16px] text-white/60 font-medium">₽</span>
-          </div>
-          <ul class="space-y-2 text-[12px] text-white/70">
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Скачивание чистого HTML</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Все стили и анимации</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 5 доработок в чате</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Мобильная адаптация</li>
-          </ul>
-        </div>
-        <button onclick="selectTariff('1 сайт (490 ₽)')" class="mt-6 w-full btn-ghost py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition">Выбрать</button>
-      </div>
-
-      <!-- 3 Sites (Popular) -->
-      <div class="glass p-5 rounded-2xl border-2 border-[#6C5CFF] relative flex flex-col justify-between bg-gradient-to-b from-[#6C5CFF]/10 to-transparent shadow-xl shadow-[#6C5CFF]/10">
-        <div class="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-[#6C5CFF] to-[#00D9FF] text-white text-[11px] font-bold uppercase tracking-wider shadow">Хит продаж</div>
-        <div>
-          <div class="text-[12px] text-[#8B7DFF] font-mono uppercase tracking-wider mb-1">Пакет «Старт»</div>
-          <h3 class="font-space font-bold text-[20px] text-white mb-2">3 Сайта</h3>
-          <div class="flex items-baseline gap-1 mb-4">
-            <span class="text-[28px] font-extrabold text-white">990</span>
-            <span class="text-[16px] text-white/60 font-medium">₽</span>
-            <span class="text-[12px] text-white/40 line-through ml-2">1 470 ₽</span>
-          </div>
-          <ul class="space-y-2 text-[12px] text-white/80">
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 3 уникальных сайта</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 330 ₽ за один сайт</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Безлимитные чат-правки</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> ИИ-генерация картинок</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Пожизненное владение</li>
-          </ul>
-        </div>
-        <button onclick="selectTariff('Пакет Старт (990 ₽)')" class="mt-6 w-full btn-primary py-2.5 rounded-xl text-[13px] font-bold text-white transition">Купить пакет</button>
-      </div>
-
-      <!-- 10 Sites -->
-      <div class="glass p-5 rounded-2xl border border-white/10 flex flex-col justify-between hover:border-[#6C5CFF]/40 transition">
-        <div>
-          <div class="text-[12px] text-white/50 font-mono uppercase tracking-wider mb-1">Для профи</div>
-          <h3 class="font-space font-bold text-[20px] text-white mb-2">10 Сайтов</h3>
-          <div class="flex items-baseline gap-1 mb-4">
-            <span class="text-[28px] font-extrabold text-white">2 490</span>
-            <span class="text-[16px] text-white/60 font-medium">₽</span>
-            <span class="text-[12px] text-white/40 line-through ml-2">4 900 ₽</span>
-          </div>
-          <ul class="space-y-2 text-[12px] text-white/70">
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 10 полноценных сайтов</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> 249 ₽ за один сайт</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Приоритетная генерация</li>
-            <li class="flex items-center gap-2"><span class="text-[#00D492]">✓</span> Поддержка и консультации</li>
-          </ul>
-        </div>
-        <button onclick="selectTariff('Пакет Маркетолог (2490 ₽)')" class="mt-6 w-full btn-ghost py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 transition">Выбрать</button>
-      </div>
-    </div>
-
-    <!-- Free test download button for developer & demo -->
-    <div class="pt-4 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-      <div class="text-[12px] text-white/50">
-        🔒 Для доступа оформите тариф или войдите как владелец:
-        <button onclick="document.getElementById('pricingModal').classList.add('hidden'); openOwnerModal();" class="text-[#FFE17B] underline font-bold ml-1 hover:text-white">👑 Ввести PIN владельца</button>
-      </div>
-      <button onclick="actualDownloadSite()" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white font-bold text-[12px] transition flex items-center gap-1.5 whitespace-nowrap">
-        <span>⬇</span> Скачать бесплатно (Тест)
-      </button>
-    </div>
-  </div>
-</div>
-
-
-<!-- Deploy Modal (Публикация сайта) -->
-<div id="deployModal" class="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden">
-  <div class="glass-strong rounded-[24px] max-w-[760px] w-full p-6 sm:p-8 max-h-[90vh] overflow-y-auto border border-white/10 relative">
-    <button onclick="document.getElementById('deployModal').classList.add('hidden')" class="absolute top-5 right-5 w-9 h-9 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition">✕</button>
-
-    <div class="flex items-center gap-3 mb-6">
-      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-[#00D492] to-[#00D9FF] flex items-center justify-center text-[24px] shadow-lg shadow-[#00D492]/20">🚀</div>
-      <div>
-        <h2 class="font-space font-bold text-[22px] sm:text-[24px] text-white">Выгрузка и публикация сайта</h2>
-        <p class="text-[13px] text-white/60">Выберите удобный способ запуска сайта в интернете</p>
-      </div>
-    </div>
-
-    <!-- Options Tabs / Cards -->
-    <div class="space-y-4">
-      
-      <!-- Option 1: Instant Direct Public Link -->
-      <div class="glass p-5 rounded-2xl border border-[#00D492]/40 bg-[#00D492]/5 space-y-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-[20px]">🌐</span>
-            <div>
-              <div class="font-bold text-[15px] text-white flex items-center gap-2">
-                Мгновенная ссылка в интернет
-                <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492] text-black font-bold">Самый простой</span>
-              </div>
-              <div class="text-[12px] text-white/60 mt-0.5">Сайт сразу будет доступен по прямой ссылке с защитой HTTPS</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex gap-2 pt-1">
-          <div class="relative flex-1">
-            <input id="publishSlug" type="text" placeholder="Желаемое имя (например: stroy-krd)" class="input-field w-full px-3.5 py-2.5 rounded-xl text-[13px]">
-          </div>
-          <button onclick="publishInstantLink()" id="publishBtn" class="btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white flex items-center gap-1.5 whitespace-nowrap bg-gradient-to-r from-[#00D492] to-[#00D9FF]">
-            <span>🚀</span> Опубликовать
-          </button>
-        </div>
-
-        <div id="publishResult" class="hidden p-3.5 rounded-xl bg-black/40 border border-[#00D492]/30 space-y-2">
-          <div class="text-[11px] text-[#00D492] font-semibold flex items-center gap-1">
-            <span>✓</span> Сайт успешно опубликован и доступен в сети:
-          </div>
-          <div class="flex items-center gap-2">
-            <input id="publishedUrlInput" readonly class="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 text-[12px] text-white font-mono flex-1 select-all">
-            <button onclick="copyPublishedUrl()" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px] font-bold text-white whitespace-nowrap">📋 Копия</button>
-            <a id="publishedUrlLink" href="#" target="_blank" class="btn-primary px-3 py-1.5 rounded-lg text-[11px] font-bold text-white whitespace-nowrap">Открыть ↗</a>
-          </div>
-        </div>
-      </div>
-
-      <!-- Option 2: Full ZIP Package for Beget / Timeweb / Reg.ru -->
-      <div class="glass p-5 rounded-2xl border border-white/10 hover:border-white/20 transition space-y-3">
-        <div class="flex items-start justify-between gap-3">
-          <div class="flex items-center gap-2.5">
-            <span class="text-[20px]">📦</span>
-            <div>
-              <div class="font-bold text-[15px] text-white">Готовый ZIP-архив для хостинга (Beget, Timeweb, Reg.ru)</div>
-              <div class="text-[12px] text-white/60 mt-0.5">Полный комплект: index.html + robots.txt + sitemap.xml + инструкция за 2 минуты</div>
-            </div>
-          </div>
-        </div>
-        <p class="text-[12px] text-white/50 leading-relaxed">
-          Идеально, если у вас уже есть любой хостинг. Просто перетащите скачанный ZIP в панель хостинга — и сайт сразу заработает на вашем домене.
-        </p>
-        <button onclick="downloadHostingZip()" class="btn-ghost w-full py-2.5 rounded-xl text-[13px] font-bold text-white hover:bg-white/10 flex items-center justify-center gap-2">
-          <span>📦</span> Скачать готовый ZIP для хостинга
-        </button>
-      </div>
-
-      <!-- Option 3: Deploy to Client's Personal GitHub -->
-      <div class="glass p-5 rounded-2xl border border-white/10 hover:border-white/20 transition space-y-3">
-        <div class="flex items-center gap-2.5">
-          <span class="text-[20px]">🐙</span>
-          <div>
-            <div class="font-bold text-[15px] text-white">Выгрузка на личный GitHub клиента (GitHub Pages)</div>
-            <div class="text-[12px] text-white/60 mt-0.5">Создаст репозиторий в вашем GitHub и сразу включит бесплатный сайт на github.io</div>
-          </div>
-        </div>
-        
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[12px]">
-          <input id="clientGhToken" type="password" placeholder="GitHub Personal Access Token (ghp_...)" class="input-field px-3 py-2 rounded-xl text-[12px]">
-          <input id="clientGhRepo" type="text" placeholder="Имя репозитория (например: my-site)" class="input-field px-3 py-2 rounded-xl text-[12px]">
-        </div>
-        <button onclick="deployToClientGitHub()" id="clientGhBtn" class="btn-ghost w-full py-2.5 rounded-xl text-[12px] font-bold text-white hover:bg-white/10 flex items-center justify-center gap-2">
-          <span>🚀</span> Создать репозиторий и опубликовать на GitHub
-        </button>
-        <div id="clientGhResult" class="hidden p-3 rounded-xl bg-black/40 border border-[#6C5CFF]/30 text-[12px] space-y-1"></div>
-      </div>
-
-      <!-- Option 4: How to connect custom .ru domain -->
-      <div class="glass p-4 rounded-xl border border-white/5 text-[12px] text-white/60 space-y-1.5">
-        <div class="font-bold text-white flex items-center gap-1.5">
-          <span>💡</span> Как привязать свой домен .ru (например, сайт.ру)?
-        </div>
-        <div class="leading-relaxed">
-          1. Купите домен на <b>Beget</b> или <b>Reg.ru</b> (стоит ~190 ₽/год).<br>
-          2. Если используете хостинг — загрузите скачанный ZIP в корень сайта.<br>
-          3. Если используете прямую ссылку — укажите CNAME запись в настройках домена.
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-
-<!-- Owner Auth Modal (Секретный вход владельца по SHA-256) -->
-<div id="ownerPinModal" class="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 hidden">
-  <div class="glass-strong rounded-[24px] max-w-[420px] w-full p-6 sm:p-8 border border-[#D4AF37]/40 shadow-2xl relative text-center">
-    <button onclick="document.getElementById('ownerPinModal').classList.add('hidden')" class="absolute top-4 right-4 w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 flex items-center justify-center text-white/60 hover:text-white transition">✕</button>
-
-    <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#D4AF37] to-[#B38728] flex items-center justify-center text-[30px] mx-auto mb-4 shadow-xl shadow-[#D4AF37]/30">👑</div>
-    <h3 class="font-space font-bold text-[20px] text-white mb-1">Режим владельца</h3>
-    <p class="text-[13px] text-white/60 mb-6">Введите секретный пароль для включения полного безлимитного доступа</p>
-
-    <div class="space-y-4">
-      <div class="relative">
-        <input id="ownerPinInput" type="password" placeholder="Пароль владельца" class="bg-black/60 border-2 border-[#D4AF37]/50 rounded-2xl py-3 px-4 pr-11 text-center font-mono text-[18px] text-[#FFE17B] w-full outline-none focus:border-[#FFE17B] transition placeholder:text-white/20" onkeyup="if(event.key==='Enter') verifyOwnerPin()">
-        <button onclick="toggleOwnerPinVisibility()" type="button" class="absolute right-3.5 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[14px]">👁</button>
-      </div>
-      
-      <button onclick="verifyOwnerPin()" id="ownerSubmitBtn" class="w-full py-3 rounded-xl bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold text-[14px] shadow-lg shadow-[#D4AF37]/30 hover:brightness-110 transition flex items-center justify-center gap-1.5">
-        <span>👑</span> Войти как владелец
-      </button>
-      <div id="ownerPinError" class="text-[12px] text-red-400 font-medium hidden"></div>
-    </div>
-  </div>
-</div>
-</div>
-
 </body>
 </html>
