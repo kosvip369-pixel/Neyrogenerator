@@ -72,7 +72,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <span id="ownerBadge" class="hidden text-[11px] px-2.5 py-0.5 rounded-full bg-gradient-to-r from-[#D4AF37] to-[#FFE17B] text-black font-extrabold shadow animate-pulse">👑 ВЛАДЕЛЕЦ</span>
           <span id="versionBadge" class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono border border-[#00D492]/30">v2.0 PRO</span>
         </div>
-        <div class="text-[11px] text-[#00D492] font-mono tracking-wider flex items-center gap-1"><span>📱</span> САЙТ СО СМАРТФОНА ЗА 30 СЕК</div>
+        <div class="text-[11px] text-white/50 font-mono tracking-wider">AI-ГЕНЕРАТОР САЙТОВ ПОД КЛЮЧ</div>
       </div>
     </div>
     
@@ -100,18 +100,6 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     <option value="anthropic/claude-sonnet-4-5" selected>Claude Sonnet 4.5</option>
   </select>
 </header>
-
-  <!-- Mobile Navigation Switcher (Конструктор vs Предпросмотр) -->
-  <div class="lg:hidden sticky top-[65px] z-40 glass-strong border-b border-white/10 px-4 py-2 flex gap-2">
-    <button onclick="switchMobileTab('builder')" id="tabBtnBuilder" class="flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition">
-      <span>🛠️</span> <span>Конструктор</span>
-    </button>
-    <button onclick="switchMobileTab('preview')" id="tabBtnPreview" class="flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition">
-      <span>👁️</span> <span>Предпросмотр</span>
-      <span id="previewReadyBadge" class="hidden w-2 h-2 rounded-full bg-[#00D492] animate-ping"></span>
-    </button>
-  </div>
-
 
 <!-- Main Layout -->
 <div class="max-w-[1600px] mx-auto px-4 md:px-6 py-4 md:py-6 grid grid-cols-1 lg:grid-cols-[360px_1fr_340px] gap-4 md:gap-5 items-start">
@@ -165,7 +153,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div class="flex items-center justify-between">
             <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Что за сайт? Подробно</label>
             <button type="button" onclick="startVoiceInput('mainPrompt', 'voiceBtnMain')" id="voiceBtnMain" class="text-[12px] font-bold text-[#8B7DFF] bg-[#6C5CFF]/15 hover:bg-[#6C5CFF]/25 border border-[#6C5CFF]/30 px-2.5 py-1 rounded-lg flex items-center gap-1.5 transition">
-              <span>🎙️</span> <span>Голосовой ввод</span>
+              <span>🎙️</span> <span>Голосом</span>
             </button>
           </div>
           <textarea id="mainPrompt" rows="5" class="input-field w-full mt-1.5 px-3.5 py-3 rounded-xl text-[14px] resize-none leading-relaxed" placeholder="Например: Современный лендинг для AI-студии которая делает сайты. Темный, премиум, как Linear и Stripe. Hero с градиентом, 3 фичи, тарифы, отзывы. Хочу вау-эффект, анимации, glassmorphism..."></textarea>
@@ -223,16 +211,6 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       </div>
     </div>
 
-    <!-- Скорость генерации (Турбо 20с vs PRO Claude 40с) -->
-    <div class="grid grid-cols-2 gap-2">
-      <button type="button" onclick="setSpeedMode('turbo')" id="speedTurboBtn" class="py-2.5 px-3 rounded-xl border border-[#00D492] bg-[#00D492]/20 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95">
-        <span>⚡</span> <span>Турбо (~20 сек)</span>
-      </button>
-      <button type="button" onclick="setSpeedMode('pro')" id="speedProBtn" class="py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95">
-        <span>👑</span> <span>PRO Claude (~40 сек)</span>
-      </button>
-    </div>
-
     <!-- Generate Button -->
     <button id="generateBtn" onclick="generateSite()" class="w-full btn-primary py-4 rounded-[16px] font-bold text-[15px] text-white flex items-center justify-center gap-2 shimmer">
       <span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>
@@ -244,93 +222,63 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <button onclick="document.getElementById('templatesModal').classList.remove('hidden')" class="flex-1 btn-ghost py-2.5 rounded-xl text-[12px] text-[#8B7DFF] font-bold border-[#6C5CFF]/40 bg-[#6C5CFF]/10">⚡ Шаблоны</button>
     </div>
 
-    <!-- Image Tools: Поиск, Генерация и Нейро-Фотошоп -->
-    <div class="glass rounded-[20px] p-4 space-y-3.5 border border-white/10">
+    <!-- Image & Photoshop Tools -->
+    <div class="glass rounded-[20px] p-4 space-y-3">
       <div class="flex items-center justify-between">
-        <h3 class="font-space font-semibold text-[14px] flex items-center gap-2 text-white">
-          <span class="w-6 h-6 rounded-lg bg-gradient-to-br from-[#FF4D8D] to-[#6C5CFF] flex items-center justify-center text-[13px]">📸</span> 
-          <span>Картинки & Нейро-Фотошоп</span>
+        <h3 class="font-space font-semibold text-[13px] flex items-center gap-2">
+          <span class="w-5 h-5 rounded-md bg-[#FF4D8D]/20 flex items-center justify-center">📷</span> Фотошоп & Картинки
         </h3>
-        <span class="text-[10px] px-2 py-0.5 rounded-full bg-[#00D492]/15 text-[#00D492] font-mono">2-в-1</span>
+        <div class="flex gap-1 bg-white/5 p-0.5 rounded-lg border border-white/10 text-[11px]">
+          <button type="button" onclick="switchImgTool('photoshop')" id="toolTabPhotoshop" class="px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition">Фотошоп</button>
+          <button type="button" onclick="switchImgTool('generate')" id="toolTabGen" class="px-2.5 py-1 rounded-md text-white/60 hover:text-white transition">Генерация</button>
+          <button type="button" onclick="switchImgTool('search')" id="toolTabSearch" class="px-2.5 py-1 rounded-md text-white/60 hover:text-white transition">Поиск</button>
+        </div>
       </div>
 
-      <!-- Mode Tabs -->
-      <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-black/40 text-[11px] font-medium">
-        <button type="button" onclick="switchImgTool('photoshop')" id="toolTabPhotoshop" class="py-1.5 rounded-lg bg-[#6C5CFF] text-white font-bold transition">🪄 Фотошоп</button>
-        <button type="button" onclick="switchImgTool('generate')" id="toolTabGen" class="py-1.5 rounded-lg text-white/60 hover:text-white transition">✦ Нейросеть</button>
-        <button type="button" onclick="switchImgTool('search')" id="toolTabSearch" class="py-1.5 rounded-lg text-white/60 hover:text-white transition">🔍 Поиск</button>
-      </div>
-
-      <!-- Tool 1: AI Photoshop (Upload + Edit) -->
-      <div id="toolPanelPhotoshop" class="space-y-2.5">
-        <div class="border-2 border-dashed border-white/15 hover:border-[#6C5CFF]/50 rounded-xl p-3 text-center cursor-pointer transition relative bg-white/[0.02]" onclick="document.getElementById('userPhotoInput').click()">
+      <!-- Photoshop Upload & Edit -->
+      <div id="toolPanelPhotoshop" class="space-y-2">
+        <div class="border-2 border-dashed border-white/15 hover:border-[#6C5CFF]/50 rounded-xl p-2.5 text-center cursor-pointer transition bg-white/[0.02]" onclick="document.getElementById('userPhotoInput').click()">
           <input type="file" id="userPhotoInput" accept="image/*" class="hidden" onchange="handleUserPhotoSelected(event)">
-          <div id="uploadPromptBox" class="space-y-1">
-            <div class="text-[20px]">📁</div>
-            <div class="text-[12px] font-bold text-white">Загрузить своё фото</div>
-            <div class="text-[10px] text-white/40">С камеры или галереи телефона</div>
-          </div>
-          <div id="uploadedPreviewBox" class="hidden items-center justify-center gap-3">
-            <img id="uploadedThumb" src="" class="w-12 h-12 rounded-lg object-cover border border-white/20">
-            <div class="text-left">
-              <div class="text-[12px] font-bold text-[#00D492] flex items-center gap-1"><span>✓</span> Фото загружено</div>
-              <div class="text-[10px] text-white/50">Нажмите, чтобы сменить</div>
-            </div>
+          <div id="uploadPromptBox" class="text-[12px] text-white/70">📁 <span class="text-white font-bold">Загрузить фото</span> <span class="text-[10px] text-white/40 block">с камеры или телефона</span></div>
+          <div id="uploadedPreviewBox" class="hidden items-center justify-center gap-2">
+            <img id="uploadedThumb" src="" class="w-10 h-10 rounded-lg object-cover border border-white/20">
+            <span class="text-[11px] text-[#00D492] font-bold">✓ Фото выбрано</span>
           </div>
         </div>
-
-        <!-- Быстрые студийные фильтры в 1 клик -->
-        <div id="quickFiltersBar" class="hidden grid-cols-4 gap-1.5 pt-0.5">
-          <button type="button" onclick="applyQuickFilter('smooth')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
-            <span>🪄</span><span>Ретушь</span>
-          </button>
-          <button type="button" onclick="applyQuickFilter('studio')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
-            <span>💡</span><span>Свет</span>
-          </button>
-          <button type="button" onclick="applyQuickFilter('vignette')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
-            <span>✂️</span><span>Фокус</span>
-          </button>
-          <button type="button" onclick="applyQuickFilter('bw')" class="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 text-[10.5px] font-medium text-white/80 hover:text-white flex flex-col items-center gap-0.5 transition active:scale-95">
-            <span>🎩</span><span>Ч/Б Нуар</span>
-          </button>
-        </div>
-
         <div class="flex gap-2">
           <div class="relative flex-1">
-            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Что изменить? (напр: убери бороду, смени фон)">
-            <button type="button" onclick="startVoiceInput('photoshopPrompt', 'voiceBtnPhotoshop')" id="voiceBtnPhotoshop" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[14px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать голосом">🎙️</button>
+            <input id="photoshopPrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="Что сделать? (напр: убери бороду, смени фон)">
+            <button type="button" onclick="startVoiceInput('photoshopPrompt', 'voiceBtnPhotoshop')" id="voiceBtnPhotoshop" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[13px]">🎙️</button>
           </div>
-          <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">
-            🪄 Изменить
-          </button>
+          <button type="button" onclick="applyAiPhotoshop()" id="aiPhotoshopBtn" class="btn-primary px-3 py-2 rounded-xl text-[12px] font-bold text-white whitespace-nowrap bg-gradient-to-r from-[#FF4D8D] to-[#6C5CFF]">🪄 Изменить</button>
         </div>
       </div>
 
-      <!-- Tool 2: AI Generate from scratch -->
+      <!-- AI Gen -->
       <div id="toolPanelGenerate" class="space-y-2 hidden">
         <div class="flex gap-2">
           <div class="relative flex-1">
-            <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-9 rounded-xl text-[12px]" placeholder="Опишите картинку: luxury house with pool">
-            <button type="button" onclick="startVoiceInput('imagePrompt', 'voiceBtnImage')" id="voiceBtnImage" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[14px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать голосом">🎙️</button>
+            <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="futuristic office, neon">
+            <button type="button" onclick="startVoiceInput('imagePrompt', 'voiceBtnImage')" id="voiceBtnImage" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[13px]">🎙️</button>
           </div>
-          <button type="button" onclick="generateImage()" class="btn-primary px-3.5 py-2 rounded-xl text-[12px] text-white font-bold whitespace-nowrap">✦ Gen</button>
+          <button type="button" onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
         </div>
       </div>
 
-      <!-- Tool 3: Search Photos -->
+      <!-- Search -->
       <div id="toolPanelSearch" class="space-y-2 hidden">
         <div class="flex gap-2">
-          <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск фото: автосервис, кофе, дом...">
-          <button type="button" onclick="searchImages()" class="btn-ghost px-3.5 py-2 rounded-xl text-[12px]">🔍 Найти</button>
+          <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск: auto repair, modern office">
+          <button type="button" onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍 Найти</button>
         </div>
       </div>
 
-      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[220px] overflow-y-auto hidden pt-1"></div>
+      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[200px] overflow-y-auto hidden pt-1"></div>
     </div>
   </div>
 
   <!-- CENTER: Preview -->
-  <div id="previewCol" class="order-1 lg:order-2 space-y-3">
+  <div class="order-1 lg:order-2 space-y-3">
     <!-- Preview Toolbar -->
     <div class="glass rounded-[16px] p-2.5 flex items-center justify-between gap-2 flex-wrap">
       <div class="flex items-center gap-2">
@@ -392,11 +340,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         </div>
         <div class="font-space font-bold text-[16px] mb-2" id="loadingTitle">Генерирую магию...</div>
         <div class="text-[13px] text-white/50 text-center max-w-[320px]" id="loadingText">Claude Sonnet 4.5 пишет код, подбирает картинки, делает анимации</div>
-        <div class="mt-6 w-[280px] h-2 rounded-full bg-white/10 overflow-hidden border border-white/10">
-          <div id="loadingBar" class="h-full bg-gradient-to-r from-[#6C5CFF] via-[#00D492] to-[#00D9FF] transition-all duration-300" style="width: 15%"></div>
+        <div class="mt-6 w-[280px] h-1 rounded-full bg-white/10 overflow-hidden">
+          <div id="loadingBar" class="h-full bg-gradient-to-r from-[#6C5CFF] to-[#00D9FF] transition-all duration-500" style="width: 10%"></div>
         </div>
-        <div class="mt-3 text-[13px] font-mono font-bold text-white/90 text-center" id="loadingStep">🔌 Подключение к Polza AI...</div>
-        <button type="button" onclick="cancelGeneration()" class="mt-4 px-3.5 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-[11px] font-medium text-white/50 hover:text-white transition">✕ Отменить</button>
+        <div class="mt-3 text-[11px] font-mono text-white/30" id="loadingStep">Инициализация Polza AI...</div>
       </div>
     </div>
 
@@ -455,11 +402,8 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <button onclick="quickChat('Добавь секцию тарифов')" class="px-2.5 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[11px] border border-white/5">💳 Тарифы</button>
         </div>
         <div class="flex gap-2">
-          <div class="relative flex-1">
-            <input id="chatInput" class="input-field w-full px-3.5 py-2.5 pr-10 rounded-xl text-[13px]" placeholder="Что исправить? Например: сделай кнопку больше" onkeydown="if(event.key==='Enter') sendChat()">
-            <button type="button" onclick="startVoiceInput('chatInput', 'voiceBtnChat')" id="voiceBtnChat" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-white/50 hover:text-white text-[15px] p-1 rounded-lg hover:bg-white/10 transition" title="Надиктовать правку голосом">🎙️</button>
-          </div>
-          <button onclick="sendChat()" class="btn-primary w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold flex-shrink-0">↑</button>
+          <input id="chatInput" class="input-field flex-1 px-3.5 py-2.5 rounded-xl text-[13px]" placeholder="Что исправить? Например: сделай кнопку больше" onkeydown="if(event.key==='Enter') sendChat()">
+          <button onclick="sendChat()" class="btn-primary w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold">↑</button>
         </div>
       </div>
     </div>
@@ -712,52 +656,9 @@ function getKey(){
   const hardcoded = 'pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4';
   return (document.getElementById('polzaKey')?.value || document.getElementById('polzaKeyMobile')?.value || document.getElementById('keyModalInput')?.value || '').trim() || localStorage.getItem('polza_key') || hardcoded;
 }
-let currentSpeedMode = localStorage.getItem('site_speed_mode') || 'turbo';
-let currentAbortController = null;
-
-function setSpeedMode(mode){
-  currentSpeedMode = mode;
-  localStorage.setItem('site_speed_mode', mode);
-  const tBtn = document.getElementById('speedTurboBtn');
-  const pBtn = document.getElementById('speedProBtn');
-  const lText = document.getElementById('loadingText');
-  if(!tBtn || !pBtn) return;
-  if(mode === 'turbo'){
-    tBtn.className = 'py-2.5 px-3 rounded-xl border border-[#00D492] bg-[#00D492]/20 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
-    pBtn.className = 'py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95';
-    if(lText) lText.textContent = 'Google Gemini 2.5 Flash пишет чистый код и собирает сайт за 15-20 сек';
-  } else {
-    pBtn.className = 'py-2.5 px-3 rounded-xl border border-[#6C5CFF] bg-[#6C5CFF]/25 text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
-    tBtn.className = 'py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 text-white/60 hover:text-white text-[12px] font-bold flex items-center justify-center gap-1.5 transition active:scale-95';
-    if(lText) lText.textContent = 'Claude Sonnet 4.5 пишет код, подбирает картинки, делает анимации';
-  }
-}
-
-function cancelGeneration(){
-  if(currentAbortController){
-    currentAbortController.abort();
-    currentAbortController = null;
-  }
-  isGenerating = false;
-  const overlay = document.getElementById('loadingOverlay');
-  if(overlay){
-    overlay.classList.add('hidden');
-    overlay.classList.remove('flex');
-  }
-  document.getElementById('previewPlaceholder')?.classList.remove('hidden');
-  const btn = document.getElementById('generateBtn');
-  if(btn){
-    btn.disabled = false;
-    btn.innerHTML = '<span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>';
-  }
-  toast('Генерация отменена', '⏹');
-}
-
 function getModel(){
-  if(currentSpeedMode === 'turbo') return 'google/gemini-2.5-flash';
-  return 'anthropic/claude-sonnet-4-5';
+  return document.getElementById('modelSelect')?.value || document.getElementById('modelSelectMobile')?.value || 'anthropic/claude-sonnet-4-5';
 }
-
 function toast(text, icon='✦'){
   const t = document.getElementById('toast');
   document.getElementById('toastText').textContent = text;
@@ -859,27 +760,39 @@ function getFormData(){
 // ---------- Backend vs Direct ----------
 async function callGenerateAPI(data){
   const apiKey = getKey();
+  const model = getModel();
+  
+  // Попробуем backend сначала
+  try{
+    const res = await fetch('/api/generate', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({...data, model, api_key: apiKey || undefined})
+    });
+    if(res.ok){
+      const j = await res.json();
+      return {html: j.html, model: j.model_used || model, source:'backend'};
+    }
+  }catch(e){ console.log('Backend not available, fallback to direct', e); }
+
+  // Direct Polza API
   if(!apiKey){
     throw new Error('Укажите Polza API ключ в шапке! Получить: https://polza.ai/register');
   }
-
-  // Быстрый каскад проверенных моделей (8-15 сек):
-  const modelsToTry = currentSpeedMode === 'pro' 
-    ? ['anthropic/claude-sonnet-4-5', 'google/gemini-2.5-flash-lite', 'openai/gpt-4o-mini']
-    : ['google/gemini-2.5-flash-lite', 'openai/gpt-4o-mini', 'anthropic/claude-sonnet-4-5'];
-
-  const system = `Ты — элитный веб-разработчик и дизайнер. Сгенерируй ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
+  
+  const system = `Ты — элитный веб-разработчик и дизайнер уровня Apple, Stripe, Linear.
+Твоя задача: сгенерировать ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
 ТРЕБОВАНИЯ:
-1. Используй Tailwind CSS CDN, Font Awesome или Lucide Icons, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js).
+1. Используй Tailwind CSS CDN, Google Fonts, Lucide Icons или Font Awesome, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
 2. Картинки: реальные качественные фото с https://images.unsplash.com по теме ниши.
-3. ВАЖНО:
-   - Если тип 'multipage': сделай переключение страниц (Главная, Каталог, О компании, Отзывы, Контакты) через JavaScript внутри одного файла.
-   - Если 'landing': продающий одностраничник с плавным якорным скроллом.
-   - Если 'ecommerce': витрина карточек с ценами, фильтрацией и модалкой заказа.
-4. Стиль: ${data.style}, Цвета: ${data.colors || 'современная гармоничная палитра'}.
-5. Форма заявки: рабочая отправка с красивым окном благодарности.
-6. Мобильная адаптивность: 100% идеальный вид на смартфонах (гамбургер-меню).
-7. Обязательно закрой все теги до </html>. Верни ТОЛЬКО чистый HTML код от <!DOCTYPE html> до </html> без markdown пояснений.`;
+3. ВАЖНО ПО ТИПУ САЙТА:
+   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные). Сделай так, чтобы пользователь кликал по меню и видел смену страниц, как на полноценном многостраничном портале!
+   - Если тип 'landing': сделай длинный продающий одностраничник с плавным якорным скроллом.
+   - Если тип 'ecommerce': подробный каталог карточек с ценами, фильтрацией, корзиной/модалкой заказа.
+4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
+5. Форма заявки: рабочая имитация отправки с всплывающим окном благодарности.
+6. Мобильная адаптивность: 100% идеальный вид на смартфонах и планшетах.
+7. Верни ТОЛЬКО чистый HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
@@ -889,225 +802,19 @@ async function callGenerateAPI(data){
 Описание: ${data.prompt}
 СГЕНЕРИРУЙ ПОЛНЫЙ HTML СЕЙЧАС.`;
 
-  let lastError = null;
-
-  for(const model of modelsToTry){
-    try {
-      const stepEl = document.getElementById('loadingStep');
-      if(stepEl) stepEl.textContent = `🚀 Генерация на модели ${model.split('/').pop()}...`;
-      
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 22000); // 22s max per model
-      
-      const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          model: model,
-          messages: [
-            {role: 'system', content: system},
-            {role: 'user', content: user}
-          ],
-          temperature: 0.7,
-          max_tokens: 4500
-        }),
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-
-      if(!resp.ok){
-        const err = await resp.text();
-        if(err.includes('INSUFFICIENT_BALANCE') || err.includes('Недостаточно средств')){
-          throw new Error('На ключе Polza AI недостаточно средств. Пополните баланс на https://polza.ai/dashboard');
-        }
-        console.warn(`Model ${model} returned error:`, err);
-        lastError = err;
-        continue;
-      }
-
-      const j = await resp.json();
-      const rawHtml = j.choices?.[0]?.message?.content || '';
-      const html = cleanHtmlCode(rawHtml);
-      if(html && html.includes('<html')){
-        return {html, model, source:'polza'};
-      }
-    } catch(err){
-      console.warn(`Model ${model} attempt failed:`, err);
-      lastError = err.message || err;
-      if(lastError.includes('недостаточно средств')) throw err;
-    }
+  const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
+    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.85, max_tokens:16000})
+  });
+  if(!resp.ok){
+    const err = await resp.text();
+    throw new Error(`Polza API error ${resp.status}: ${err.slice(0,500)}`);
   }
-
-  // Резервный умный генератор (если сеть или внешние модели заблокированы)
-  console.log('Using built-in smart builder fallback...');
-  return {
-    html: generateSmartFallbackSite(data),
-    model: 'SmartBuilder/Pro-Engine',
-    source: 'fallback'
-  };
-}
-
-function cleanHtmlCode(raw){
-  if(!raw) return '';
-  const match = raw.match(/<!DOCTYPE[\s\S]*<\/html>/i) || raw.match(/<html[\s\S]*<\/html>/i);
-  if(match) return match[0].trim();
-  let clean = raw.replace(/^```html\s*/i, '').replace(/^```\s*/, '').replace(/\s*```$/, '').trim();
-  if(!clean.endsWith('</html>')){
-    clean += '\n</body>\n</html>';
-  }
-  return clean;
-}
-
-function generateSmartFallbackSite(d){
-  const colors = d.colors || 'от индиго до изумрудного';
-  const phone = d.contacts?.phone || '+7 (999) 000-00-00';
-  const email = d.contacts?.email || 'info@' + (d.site_name.toLowerCase().replace(/[^a-z0-9]/g,'') || 'site') + '.ru';
-  
-  return `<!DOCTYPE html>
-<html lang="ru" class="scroll-smooth">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${d.site_name} — ${d.business_type}</title>
-  <script src="https://cdn.tailwindcss.com"><\/script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
-  <style>body{font-family:'Plus Jakarta Sans',sans-serif;}</style>
-</head>
-<body class="bg-[#0B0F19] text-white antialiased selection:bg-[#6C5CFF] selection:text-white">
-  <!-- Header -->
-  <header class="fixed top-0 left-0 right-0 z-50 bg-[#0B0F19]/80 backdrop-blur-xl border-b border-white/10">
-    <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
-      <a href="#" class="text-xl font-bold flex items-center gap-2">
-        <span class="w-8 h-8 rounded-lg bg-gradient-to-tr from-[#6C5CFF] to-[#00D492] flex items-center justify-center text-sm font-black">✦</span>
-        <span>${d.site_name}</span>
-      </a>
-      <nav class="hidden md:flex items-center gap-6 text-sm font-medium text-white/70">
-        <a href="#services" class="hover:text-white transition">Услуги</a>
-        <a href="#benefits" class="hover:text-white transition">Преимущества</a>
-        <a href="#reviews" class="hover:text-white transition">Отзывы</a>
-        <a href="#contacts" class="hover:text-white transition">Контакты</a>
-      </nav>
-      <div class="flex items-center gap-3">
-        <a href="tel:${phone}" class="hidden sm:flex text-xs font-mono text-[#00D492] border border-[#00D492]/30 px-3 py-1.5 rounded-lg">${phone}</a>
-        <a href="#order" class="px-4 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:opacity-90 transition">Оставить заявку</a>
-        <button id="mobileMenuBtn" class="md:hidden text-white/80 p-2"><i class="fa-solid fa-bars text-lg"></i></button>
-      </div>
-    </div>
-    <!-- Mobile Menu -->
-    <div id="mobileMenu" class="hidden md:hidden bg-[#0B0F19] border-b border-white/10 px-4 py-4 space-y-3">
-      <a href="#services" class="block text-sm text-white/80 py-1">Услуги</a>
-      <a href="#benefits" class="block text-sm text-white/80 py-1">Преимущества</a>
-      <a href="#reviews" class="block text-sm text-white/80 py-1">Отзывы</a>
-      <a href="#contacts" class="block text-sm text-white/80 py-1">Контакты</a>
-    </div>
-  </header>
-
-  <!-- Hero Section -->
-  <section class="pt-32 pb-20 px-4 relative overflow-hidden">
-    <div class="absolute top-1/4 left-1/2 -translate-x-1/2 w-96 h-96 bg-[#6C5CFF]/20 rounded-full blur-3xl pointer-events-none"></div>
-    <div class="max-w-4xl mx-auto text-center relative z-10 space-y-6">
-      <span class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-medium text-[#00D492]">
-        <span>⚡</span> Официальная гарантия качества
-      </span>
-      <h1 class="text-3xl sm:text-5xl font-extrabold tracking-tight leading-tight">
-        ${d.site_name} — профессиональный подход к <span class="bg-gradient-to-r from-[#6C5CFF] via-[#00D492] to-[#00D9FF] bg-clip-text text-transparent">${d.business_type}</span>
-      </h1>
-      <p class="text-base sm:text-lg text-white/60 max-w-2xl mx-auto leading-relaxed">
-        ${d.prompt}
-      </p>
-      <div class="flex flex-col sm:flex-row items-center justify-center gap-3 pt-4">
-        <a href="#order" class="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:shadow-lg hover:shadow-[#6C5CFF]/25 transition">
-          Получить консультацию
-        </a>
-        <a href="#services" class="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm text-white/80 bg-white/5 hover:bg-white/10 border border-white/10 transition">
-          Смотреть услуги
-        </a>
-      </div>
-    </div>
-  </section>
-
-  <!-- Benefits Section -->
-  <section id="benefits" class="py-16 px-4 bg-white/[0.02] border-y border-white/5">
-    <div class="max-w-6xl mx-auto">
-      <div class="text-center mb-12">
-        <h2 class="text-2xl sm:text-3xl font-bold">Почему выбирают нас</h2>
-        <p class="text-white/50 text-sm mt-2">Стандарты надежности и индивидуальный подход</p>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-          <div class="w-10 h-10 rounded-xl bg-[#6C5CFF]/20 flex items-center justify-center text-[#6C5CFF] text-lg font-bold">✓</div>
-          <h3 class="text-lg font-bold">Быстрый результат</h3>
-          <p class="text-white/60 text-xs leading-relaxed">Выполняем задачи в точно установленные сроки с соблюдением всех договоренностей.</p>
-        </div>
-        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-          <div class="w-10 h-10 rounded-xl bg-[#00D492]/20 flex items-center justify-center text-[#00D492] text-lg font-bold">★</div>
-          <h3 class="text-lg font-bold">Честные цены</h3>
-          <p class="text-white/60 text-xs leading-relaxed">Прозрачная смета без скрытых наценок и переплат. Фиксируем стоимость до начала работ.</p>
-        </div>
-        <div class="p-6 rounded-2xl bg-white/5 border border-white/10 space-y-3">
-          <div class="w-10 h-10 rounded-xl bg-[#00D9FF]/20 flex items-center justify-center text-[#00D9FF] text-lg font-bold">🛡️</div>
-          <h3 class="text-lg font-bold">100% Гарантия</h3>
-          <p class="text-white/60 text-xs leading-relaxed">Предоставляем официальную гарантию на все выполненные работы и услуги.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Order / Contact Form -->
-  <section id="order" class="py-20 px-4">
-    <div class="max-w-xl mx-auto p-8 rounded-3xl bg-gradient-to-b from-white/10 to-white/5 border border-white/15 backdrop-blur-xl">
-      <div class="text-center space-y-2 mb-6">
-        <h2 class="text-2xl font-bold">Оставить заявку</h2>
-        <p class="text-white/50 text-xs">Заполните форму, и мы свяжемся с вами в течение 10 минут</p>
-      </div>
-      <form id="contactForm" onsubmit="event.preventDefault(); document.getElementById('thankModal').classList.remove('hidden');" class="space-y-4">
-        <div>
-          <label class="block text-xs text-white/70 mb-1">Ваше имя</label>
-          <input required type="text" placeholder="Иван" class="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:border-[#6C5CFF] focus:outline-none">
-        </div>
-        <div>
-          <label class="block text-xs text-white/70 mb-1">Номер телефона</label>
-          <input required type="tel" placeholder="+7 (___) ___-__-__" class="w-full px-4 py-3 rounded-xl bg-black/40 border border-white/10 text-white text-sm focus:border-[#6C5CFF] focus:outline-none">
-        </div>
-        <button type="submit" class="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-gradient-to-r from-[#6C5CFF] to-[#00D492] hover:opacity-95 transition mt-2">
-          Отправить заявку
-        </button>
-      </form>
-    </div>
-  </section>
-
-  <!-- Thank You Modal -->
-  <div id="thankModal" class="hidden fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-[#151A2D] p-6 rounded-2xl max-w-sm text-center space-y-4 border border-white/15">
-      <div class="text-4xl">🎉</div>
-      <h3 class="text-xl font-bold">Спасибо за заявку!</h3>
-      <p class="text-xs text-white/60">Мы получили ваши данные и свяжемся с вами в ближайшее время.</p>
-      <button onclick="document.getElementById('thankModal').classList.add('hidden')" class="w-full py-2.5 rounded-xl font-bold text-xs bg-[#6C5CFF] text-white">Закрыть</button>
-    </div>
-  </div>
-
-  <!-- Footer -->
-  <footer id="contacts" class="py-8 px-4 border-t border-white/10 text-center text-xs text-white/40 space-y-2">
-    <div>${d.site_name} &bull; ${d.business_type}</div>
-    <div>Телефон: <a href="tel:${phone}" class="text-white/70 hover:underline">${phone}</a> | Email: ${email}</div>
-    <div class="pt-2 text-[10px] text-white/30">&copy; ${new Date().getFullYear()} Все права защищены.</div>
-  </footer>
-
-  <script>
-    const mBtn = document.getElementById('mobileMenuBtn');
-    const mMenu = document.getElementById('mobileMenu');
-    if(mBtn && mMenu){
-      mBtn.onclick = () => mMenu.classList.toggle('hidden');
-      mMenu.querySelectorAll('a').forEach(a => a.onclick = () => mMenu.classList.add('hidden'));
-    }
-  <\/script>
-</body>
-</html>`;
+  const j = await resp.json();
+  let html = j.choices[0].message.content;
+  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+  return {html, model, source:'direct'};
 }
 
 async function callRefineAPI(currentHtml, message){
@@ -1149,7 +856,7 @@ async function callRefineAPI(currentHtml, message){
 2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
    - Кнопка мобильного меню ОБЯЗАНА 100% открывать и закрывать меню!
    - Кнопка id="mobileMenuBtn", окно id="mobileMenu" (class="hidden fixed inset-0 z-50 ..."), кнопка закрытия id="closeMobileMenu".
-   - Внизу в блоке скрипта обязательно добавь:
+   - Внизу в <script> обязательно добавь:
      const mBtn = document.getElementById('mobileMenuBtn');
      const mMenu = document.getElementById('mobileMenu');
      const cBtn = document.getElementById('closeMobileMenu');
@@ -1202,7 +909,7 @@ async function generateSite(){
   const data = getFormData();
   if(!data.prompt){
     toast('Опиши какой сайт нужен!', '⚠️');
-    document.getElementById('mainPrompt')?.focus();
+    document.getElementById('mainPrompt').focus();
     return;
   }
   if(isGenerating) return;
@@ -1210,48 +917,38 @@ async function generateSite(){
   
   const btn = document.getElementById('generateBtn');
   btn.disabled = true;
-  btn.innerHTML = '⏳ 0s...';
+  btn.innerHTML = '⏳ Генерирую...';
   
   const overlay = document.getElementById('loadingOverlay');
   overlay.classList.remove('hidden');
   overlay.classList.add('flex');
-  document.getElementById('previewPlaceholder')?.classList.add('hidden');
-  if(window.innerWidth < 1024) {
-    switchMobileTab('preview');
-    window.scrollTo({top: 0, behavior: 'smooth'});
-  }
-
-  const loadingStep = document.getElementById('loadingStep');
-  const loadingBar = document.getElementById('loadingBar');
-  loadingStep.textContent = '🚀 Подключение к нейросети Polza AI...';
-  loadingBar.style.width = '15%';
-
-  const start = Date.now();
-
-  // Живой секундный таймер (в точности как у работающей генерации картинок)
-  const timerInterval = setInterval(()=>{
-    const s = Math.floor((Date.now() - start)/1000);
-    btn.innerHTML = `⏳ ${s}s...`;
-    loadingBar.style.width = `${Math.min(95, 15 + s * 6)}%`;
-    
-    if(s < 4){
-      loadingStep.textContent = `🔌 Отправка запроса в Polza AI (${s}с)...`;
-    } else if(s < 8){
-      loadingStep.textContent = `🧠 Нейросеть генерирует блоки и контент (${s}с)...`;
-    } else if(s < 14){
-      loadingStep.textContent = `🎨 Стилизация Tailwind CSS + анимации (${s}с)...`;
-    } else {
-      loadingStep.textContent = `✨ Завершение сборки сайта (${s}с)...`;
+  document.getElementById('previewPlaceholder').classList.add('hidden');
+  
+  const steps = [
+    'Подключаюсь к Polza AI...',
+    'Claude Sonnet 4.5 думает над дизайном...',
+    'Пишу Tailwind + GSAP анимации...',
+    'Подбираю картинки с Unsplash...',
+    'Делаю адаптив и интерактив...',
+    'Финальные штрихи...'
+  ];
+  let step = 0;
+  const interval = setInterval(()=>{
+    if(step < steps.length){
+      document.getElementById('loadingStep').textContent = steps[step];
+      document.getElementById('loadingBar').style.width = `${15 + step*15}%`;
+      step++;
     }
-  }, 1000);
-
+  }, 800);
+  
+  const start = Date.now();
   try{
     const result = await callGenerateAPI(data);
     currentHtml = result.html;
     
-    clearInterval(timerInterval);
-    loadingBar.style.width = '100%';
-    loadingStep.textContent = '✨ Готово! Отображаю сайт...';
+    clearInterval(interval);
+    document.getElementById('loadingBar').style.width = '100%';
+    document.getElementById('loadingStep').textContent = 'Готово! Рендерю...';
     
     setTimeout(()=>{
       renderPreview(currentHtml);
@@ -1263,22 +960,23 @@ async function generateSite(){
       document.getElementById('statSize').textContent = `${(currentHtml.length/1024).toFixed(1)} KB`;
       document.getElementById('statModel').textContent = result.model.split('/').pop();
       
+      // History
       history.unshift({name: data.site_name, prompt: data.prompt.slice(0,60), time: new Date().toLocaleTimeString(), size: currentHtml.length});
       history = history.slice(0,10);
       localStorage.setItem('neuralsite_history', JSON.stringify(history));
       renderHistory();
       
       addChatMessage('assistant', `Готово! ✨ Сгенерировал сайт "${data.site_name}" за ${elapsed} сек на модели ${result.model}. Как тебе? Скажи что улучшить — я сразу исправлю.`);
-      toast('Сайт готов! 🔥', '✦');
-    }, 400);
+      toast('Сайт сгенерирован! 🔥', '✦');
+    }, 600);
     
   }catch(e){
-    clearInterval(timerInterval);
+    clearInterval(interval);
     overlay.classList.add('hidden');
     overlay.classList.remove('flex');
-    document.getElementById('previewPlaceholder')?.classList.remove('hidden');
+    document.getElementById('previewPlaceholder').classList.remove('hidden');
     toast(e.message, '❌');
-    addChatMessage('assistant', `Ошибка: ${e.message}.`);
+    addChatMessage('assistant', `Ошибка: ${e.message}. Проверь Polza API ключ и баланс на https://polza.ai/dashboard`);
   }finally{
     isGenerating = false;
     btn.disabled = false;
@@ -2104,486 +1802,177 @@ async function deployToClientGitHub(){
 }
 
 
-// ---------- Mobile View Tabs ----------
-function switchMobileTab(tab){
-  const bCol = document.getElementById('builderCol');
-  const pCol = document.getElementById('previewCol');
-  const bBtn = document.getElementById('tabBtnBuilder');
-  const pBtn = document.getElementById('tabBtnPreview');
-  
-  if(tab === 'builder'){
-    bCol.classList.remove('hidden');
-    pCol.classList.add('hidden');
-    bBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition';
-    pBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition';
-  } else {
-    bCol.classList.add('hidden');
-    pCol.classList.remove('hidden');
-    pBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-[#6C5CFF] text-white shadow-md flex items-center justify-center gap-1.5 transition';
-    bBtn.className = 'flex-1 py-2 px-3 rounded-xl text-[13px] font-bold bg-white/5 text-white/60 hover:text-white flex items-center justify-center gap-1.5 transition';
-    document.getElementById('previewReadyBadge')?.classList.add('hidden');
-  }
-}
-
-// ---------- Universal Voice Input Engine (Zero-Stuttering) ----------
-let activeRecognition = null;
-let activeTargetId = null;
-let activeBtnId = null;
-let baseTextBeforeVoice = '';
+// ---------- Голосовой ввод ----------
+let activeRec = null;
+let baseTextVoice = '';
 
 function startVoiceInput(inputId, btnId){
   const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRec){
-    return toast('Голосовой ввод не поддерживается вашим браузером', '⚠️');
-  }
+  if(!SpeechRec) return toast('Голосовой ввод не поддерживается браузером', '⚠️');
 
-  const target = document.getElementById(inputId);
   const btn = document.getElementById(btnId);
-  if(!target) return;
+  const input = document.getElementById(inputId);
+  if(!input) return;
 
-  // Toggle off if already recording this input
-  if(activeRecognition && activeTargetId === inputId){
-    activeRecognition.stop();
+  if(activeRec){
+    try { activeRec.stop(); } catch(e){}
+    activeRec = null;
+    if(btn) btn.innerHTML = '🎙️ Голосом';
     return;
   }
-  
-  if(activeRecognition){
-    try{ activeRecognition.stop(); }catch(e){}
-  }
 
-  activeTargetId = inputId;
-  activeBtnId = btnId;
-  baseTextBeforeVoice = target.value.trim();
+  const rec = new SpeechRec();
+  rec.lang = 'ru-RU';
+  rec.continuous = false;
+  rec.interimResults = false;
+  activeRec = rec;
+  baseTextVoice = input.value.trim();
 
-  activeRecognition = new SpeechRec();
-  activeRecognition.lang = 'ru-RU';
-  activeRecognition.interimResults = false; // Strictly false prevents stutter & repeated words
-  activeRecognition.maxAlternatives = 1;
+  if(btn) btn.innerHTML = '🔴 Говорите...';
 
-  activeRecognition.onstart = function(){
-    if(btn){
-      btn.dataset.prevHtml = btn.innerHTML;
-      btn.classList.add('bg-red-600', 'text-white', 'animate-pulse');
-      btn.innerHTML = '🔴';
-    }
-    toast('Говорите в микрофон, я слушаю... 🎙️', '✦');
+  rec.onresult = function(e){
+    const transcript = e.results[0][0].transcript.trim();
+    input.value = baseTextVoice ? baseTextVoice + ' ' + transcript : transcript;
+    input.dispatchEvent(new Event('input'));
   };
 
-  activeRecognition.onresult = function(event){
-    if(event.results && event.results.length > 0){
-      const spoken = event.results[0][0].transcript.trim();
-      if(spoken){
-        target.value = baseTextBeforeVoice ? (baseTextBeforeVoice + ' ' + spoken) : spoken;
-        target.dispatchEvent(new Event('input'));
-        toast(`Распознано: «${spoken.slice(0, 35)}...» 🎙️`, '✅');
-      }
-    }
+  rec.onerror = function(){
+    if(btn) btn.innerHTML = '🎙️ Голосом';
+    activeRec = null;
   };
 
-  activeRecognition.onerror = function(event){
-    if(event.error !== 'no-speech'){
-      toast('Микрофон: ' + event.error, '❌');
-    }
-    stopVoiceUI();
+  rec.onend = function(){
+    if(btn) btn.innerHTML = '🎙️ Голосом';
+    activeRec = null;
   };
 
-  activeRecognition.onend = function(){
-    stopVoiceUI();
-  };
-
-  try{
-    activeRecognition.start();
-  }catch(e){
-    stopVoiceUI();
-  }
+  try { rec.start(); } catch(e){ activeRec = null; }
 }
 
-function stopVoiceUI(){
-  if(activeBtnId){
-    const btn = document.getElementById(activeBtnId);
-    if(btn){
-      btn.classList.remove('bg-red-600', 'text-white', 'animate-pulse');
-      if(btn.dataset.prevHtml) btn.innerHTML = btn.dataset.prevHtml;
-    }
-  }
-  activeRecognition = null;
-  activeTargetId = null;
-  activeBtnId = null;
-}
+// ---------- Фотошоп ----------
+let uploadedPhotoBase64 = null;
 
-// ---------- Image Tools Switcher & AI Photoshop ----------
 function switchImgTool(tool){
   ['photoshop', 'generate', 'search'].forEach(t => {
-    const cap = t.charAt(0).toUpperCase() + t.slice(1);
-    const tab = document.getElementById('toolTab' + cap) || document.getElementById('toolTabGen');
-    const panel = document.getElementById('toolPanel' + cap);
-    if(tab) {
+    const tab = document.getElementById('toolTab' + (t === 'generate' ? 'Gen' : (t === 'photoshop' ? 'Photoshop' : 'Search')));
+    const panel = document.getElementById('toolPanel' + (t === 'generate' ? 'Generate' : (t === 'photoshop' ? 'Photoshop' : 'Search')));
+    if(tab && panel){
       if(t === tool){
-        tab.className = 'py-1.5 rounded-lg bg-[#6C5CFF] text-white font-bold transition';
+        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
+        panel.classList.remove('hidden');
       } else {
-        tab.className = 'py-1.5 rounded-lg text-white/60 hover:text-white transition';
+        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
+        panel.classList.add('hidden');
       }
-    }
-    if(panel){
-      if(t === tool) panel.classList.remove('hidden');
-      else panel.classList.add('hidden');
     }
   });
 }
-
-let uploadedBase64 = null;
 
 function handleUserPhotoSelected(e){
   const file = e.target.files?.[0];
   if(!file) return;
   const reader = new FileReader();
-  reader.onload = function(evt){
-    uploadedBase64 = evt.target.result;
-    document.getElementById('uploadPromptBox').classList.add('hidden');
-    const prevBox = document.getElementById('uploadedPreviewBox');
-    prevBox.classList.remove('hidden');
-    prevBox.classList.add('flex');
-    const filtersBar = document.getElementById('quickFiltersBar');
-    if(filtersBar){
-      filtersBar.classList.remove('hidden');
-      filtersBar.classList.add('grid');
-    }
-    document.getElementById('uploadedThumb').src = uploadedBase64;
-    toast('Фото загружено! Опишите задачу для ИИ или выберите фильтр', '📸');
+  reader.onload = function(ev){
+    uploadedPhotoBase64 = ev.target.result;
+    document.getElementById('uploadPromptBox')?.classList.add('hidden');
+    const pBox = document.getElementById('uploadedPreviewBox');
+    if(pBox){ pBox.classList.remove('hidden'); pBox.classList.add('flex'); }
+    const th = document.getElementById('uploadedThumb');
+    if(th) th.src = uploadedPhotoBase64;
+    toast('Фото выбрано! Опишите задачу и нажмите «Изменить»', '📸');
   };
   reader.readAsDataURL(file);
 }
 
-// Умный построитель промпта для ИИ-редактирования с сохранением личности человека
-function enhancePhotoEditPrompt(promptText){
-  const p = (promptText || '').trim();
-  const lower = p.toLowerCase();
-  
-  let instructions = p;
-  if(lower.includes('бород') || lower.includes('побрей') || lower.includes('сбрей') || lower.includes('убери щетин')){
-    instructions = "Clean-shaven face. Completely remove beard, mustache, and all facial hair stubble. Render natural, smooth, realistic skin on the chin, jawline and cheeks with natural skin texture, matching the lighting and skin tone of the face.";
-  } else if(lower.includes('добавь бород') || lower.includes('сделай бород')){
-    instructions = "Add a neat, stylish, well-groomed beard and mustache that naturally fits the facial contour and hair color.";
-  } else if(lower.includes('улыбк') || lower.includes('улыбн')){
-    instructions = "Add a warm, friendly, natural smile showing clean white teeth.";
-  } else if(lower.includes('фон') || lower.includes('задний план')){
-    instructions = `Change the background: ${p}. Maintain perfect lighting integration on the foreground subject.`;
-  } else if(lower.includes('костюм') || lower.includes('одежд') || lower.includes('одень')){
-    instructions = `Change clothing to: ${p}. Photorealistic premium fabric texture.`;
-  } else if(lower.includes('омолод') || lower.includes('моложе') || lower.includes('морщин')){
-    instructions = "Make the person look younger, smoother skin, reduce wrinkles and bags under eyes while keeping authentic facial identity.";
-  }
-  
-  return `PHOTO EDITING & RETOUCHING: ${instructions}.
-CRITICAL IDENTITY PRESERVATION: Strictly preserve the exact same individual, identical facial structure, eyes, nose, head shape, hairstyle, lighting direction, camera perspective, and background from the input photo. High quality realistic photorealistic portrait retouching.`;
-}
-
-// Быстрые фильтры прямо в браузере (без ожидания API)
-function applyQuickFilter(type){
-  if(!uploadedBase64){
-    toast('Сначала загрузите фото выше 📷', '⚠️');
-    document.getElementById('userPhotoInput')?.click();
-    return;
-  }
-  
-  toast('Применяю студийный фильтр...', '✨');
-  const img = new Image();
-  img.onload = function(){
-    const canvas = document.createElement('canvas');
-    canvas.width = img.naturalWidth || img.width;
-    canvas.height = img.naturalHeight || img.height;
-    const ctx = canvas.getContext('2d');
-    
-    if(type === 'smooth'){
-      // Сглаживание и мягкий свет
-      ctx.drawImage(img, 0, 0);
-      ctx.globalAlpha = 0.35;
-      ctx.filter = 'blur(3px)';
-      ctx.drawImage(img, 0, 0);
-      ctx.globalAlpha = 1.0;
-      ctx.filter = 'contrast(106%) brightness(103%)';
-      ctx.drawImage(canvas, 0, 0);
-    } else if(type === 'studio'){
-      // Студийный свет и сочность
-      ctx.filter = 'contrast(115%) brightness(108%) saturate(115%)';
-      ctx.drawImage(img, 0, 0);
-    } else if(type === 'bw'){
-      // Премиум нуар
-      ctx.filter = 'grayscale(100%) contrast(125%) brightness(104%)';
-      ctx.drawImage(img, 0, 0);
-    } else if(type === 'vignette'){
-      // Портретный фокус с виньеткой
-      ctx.filter = 'contrast(112%) brightness(104%)';
-      ctx.drawImage(img, 0, 0);
-      const gradient = ctx.createRadialGradient(
-        canvas.width/2, canvas.height/2, canvas.width*0.28,
-        canvas.width/2, canvas.height/2, canvas.width*0.72
-      );
-      gradient.addColorStop(0, 'rgba(0,0,0,0)');
-      gradient.addColorStop(1, 'rgba(0,0,0,0.55)');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-    
-    const editedUrl = canvas.toDataURL('image/jpeg', 0.92);
-    const cont = document.getElementById('imageResults');
-    cont.classList.remove('hidden');
-    cont.insertAdjacentHTML('afterbegin', `
-      <div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/40 bg-[#0F1320] p-3 space-y-2 group shadow-xl">
-        <div class="flex items-center justify-between text-[11px] text-white/70">
-          <span class="font-bold text-[#6C5CFF] flex items-center gap-1">✨ Быстрая студийная ретушь (${type})</span>
-          <span class="text-white/40 font-mono">готово за 0.1с</span>
-        </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10">
-            <span class="absolute top-1.5 left-1.5 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-white/70 font-mono">До</span>
-            <img src="${uploadedBase64}" class="w-full h-full object-cover">
-          </div>
-          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#6C5CFF]/40">
-            <span class="absolute top-1.5 left-1.5 text-[9px] bg-[#6C5CFF]/90 px-1.5 py-0.5 rounded text-white font-bold font-mono">После</span>
-            <img src="${editedUrl}" class="w-full h-full object-cover">
-          </div>
-        </div>
-        <div class="flex gap-2 pt-1">
-          <button onclick="insertImage('${editedUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
-            <span>✦</span> Вставить в сайт
-          </button>
-          <a href="${editedUrl}" download="retouched-photo.jpg" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
-            💾 Скачать
-          </a>
-        </div>
-      </div>
-    `);
-    toast('Фильтр применен! ✨', '✅');
-  };
-  img.src = uploadedBase64;
-}
-
-// Настоящий ИИ Нейро-Фотошоп (Image-to-Image / Inpainting)
 async function applyAiPhotoshop(){
   const editPrompt = (document.getElementById('photoshopPrompt')?.value || '').trim();
-  if(!uploadedBase64){
+  if(!uploadedPhotoBase64){
     toast('Сначала загрузите фотографию выше 📷', '⚠️');
     document.getElementById('userPhotoInput')?.click();
     return;
   }
   if(!editPrompt){
-    toast('Опишите, что изменить на фото (например: убери бороду, смени фон) ✏️', '⚠️');
+    toast('Опишите, что изменить (например: убери бороду) ✏️', '⚠️');
     document.getElementById('photoshopPrompt')?.focus();
     return;
   }
 
   const apiKey = getKey();
-  if(!apiKey){
-    toast('Нужен Polza API ключ для ИИ', '⚠️');
-    openOwnerModal();
-    return;
-  }
-
   const btn = document.getElementById('aiPhotoshopBtn');
-  if(btn){
-    btn.disabled = true;
-    btn.innerHTML = '⏳ 0s';
-  }
+  if(btn){ btn.disabled = true; btn.innerHTML = '⏳ Обработка...'; }
+  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
 
-  toast('Нейро-Фотошоп редактирует ваше фото... 🪄', '🎨');
-
-  const startTime = Date.now();
-  const timerInterval = setInterval(()=>{
-    const s = Math.floor((Date.now() - startTime)/1000);
-    if(btn) btn.innerHTML = `⏳ ${s}s`;
-  }, 1000);
-
-  const cont = document.getElementById('imageResults');
-  cont.classList.remove('hidden');
-  const placeholderId = 'loading_edit_' + Date.now();
-  cont.insertAdjacentHTML('afterbegin', `
-    <div id="${placeholderId}" class="col-span-3 rounded-xl p-4 bg-white/5 border border-[#FF4D8D]/40 text-center flex flex-col items-center justify-center gap-2">
-      <div class="flex items-center gap-3">
-        <img src="${uploadedBase64}" class="w-10 h-10 rounded-lg object-cover border border-white/20">
-        <div class="w-5 h-5 border-2 border-[#FF4D8D] border-t-transparent rounded-full animate-spin"></div>
-      </div>
-      <div class="text-[12px] text-white/90 font-medium">Нейро-Фотошоп: "${editPrompt.slice(0,35)}..."</div>
-      <div class="text-[11px] text-white/50">ИИ перерисовывает ваше фото с сохранением лица (~15-30 сек)</div>
-    </div>
-  `);
-
-  try{
-    const fullPrompt = enhancePhotoEditPrompt(editPrompt);
-    let imageUrl = null;
-
-    // 1. Попробуем бэкенд /api/generate-image с image_base64
-    try{
-      const res = await fetch('/api/generate-image', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
+  try {
+    const fullPrompt = 'Photo editing: ' + editPrompt + '. Strictly keep the exact same person, face, clothes, lighting, and background from the input photo. High quality realistic photo retouch.';
+    
+    // Direct Polza Media API
+    const res = await fetch('https://polza.ai/api/v1/media', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + apiKey
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-image',
+        input: {
           prompt: fullPrompt,
-          image_base64: uploadedBase64,
-          mode: 'edit',
-          model: 'google/gemini-2.5-flash-image',
-          api_key: apiKey
-        })
-      });
-      if(res.ok){
-        const j = await res.json();
-        if(j.url && !j.fallback) imageUrl = j.url;
-      }
-    }catch(err){ console.log('Backend edit fallback to direct', err); }
+          images: [{ type: 'base64', data: uploadedPhotoBase64 }],
+          aspect_ratio: '1:1'
+        }
+      })
+    });
 
-    // 2. Если на GitHub Pages (прямой вызов Polza Media API)
-    if(!imageUrl){
-      const editModels = ['google/gemini-2.5-flash-image', 'google/gemini-3.1-flash-image'];
-      let lastError = null;
+    if(!res.ok){
+      const err = await res.text();
+      throw new Error(err.slice(0, 150));
+    }
 
-      for(const m of editModels){
-        try{
-          const initRes = await fetch('https://polza.ai/api/v1/media', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey}`
-            },
-            body: JSON.stringify({
-              model: m,
-              input: {
-                prompt: fullPrompt,
-                images: [{
-                  type: 'base64',
-                  data: uploadedBase64
-                }],
-                aspect_ratio: '1:1'
-              }
-            })
-          });
+    const data = await res.json();
+    let url = data.data?.[0]?.url || data.data?.url;
 
-          if(!initRes.ok){
-            const errData = await initRes.text();
-            lastError = errData;
-            continue;
-          }
-
-          const initData = await initRes.json();
-          if(initData.data && Array.isArray(initData.data) && initData.data[0]?.url){
-            imageUrl = initData.data[0].url;
-            break;
-          } else if(initData.data?.url){
-            imageUrl = initData.data.url;
+    if(!url && data.id){
+      for(let i=0; i<20; i++){
+        await new Promise(r => setTimeout(r, 2000));
+        const stRes = await fetch('https://polza.ai/api/v1/media/' + data.id, {
+          headers: { 'Authorization': 'Bearer ' + apiKey }
+        });
+        if(stRes.ok){
+          const st = await stRes.json();
+          if(st.status === 'completed'){
+            url = st.data?.[0]?.url || st.data?.url;
             break;
           }
-
-          const mediaId = initData.id || initData.requestId;
-          if(mediaId){
-            for(let i=0; i<30; i++){
-              await new Promise(r => setTimeout(r, 2500));
-              const checkRes = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
-                headers: {'Authorization': `Bearer ${apiKey}`}
-              });
-              if(checkRes.ok){
-                const stData = await checkRes.json();
-                if(stData.status === 'completed'){
-                  imageUrl = stData.data?.url || (Array.isArray(stData.data) ? stData.data[0]?.url : null);
-                  break;
-                } else if(stData.status === 'failed' || stData.status === 'error'){
-                  throw new Error(stData.error?.message || 'Обработка отклонена');
-                }
-              }
-            }
-          }
-
-          if(imageUrl) break;
-        }catch(mErr){
-          console.warn(`Model ${m} failed:`, mErr);
-          lastError = mErr.message;
         }
-      }
-
-      if(!imageUrl && lastError){
-        if(lastError.includes('INSUFFICIENT_BALANCE') || lastError.includes('Недостаточно средств')){
-          throw new Error('На ключе Polza AI не хватает баланса для нейросети. Пополните баланс на polza.ai или используйте кнопки быстрой ретуши выше.');
-        }
-        throw new Error('Ошибка ИИ-обработки: ' + lastError.slice(0, 150));
       }
     }
 
-    clearInterval(timerInterval);
-    document.getElementById(placeholderId)?.remove();
-    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
+    if(!url) throw new Error('Не удалось получить фото. Попробуйте еще раз.');
 
-    if(!imageUrl){
-      throw new Error('Время ожидания фото истекло. Попробуйте еще раз или используйте кнопки быстрой ретуши.');
-    }
-
-    // Отображаем результат с карточкой До / После
+    const cont = document.getElementById('imageResults');
+    cont.classList.remove('hidden');
     cont.insertAdjacentHTML('afterbegin', `
-      <div class="col-span-3 rounded-xl overflow-hidden border border-[#FF4D8D]/40 bg-[#0F1320] p-3 space-y-2 group shadow-xl">
+      <div class="col-span-3 rounded-xl overflow-hidden border border-[#FF4D8D]/40 bg-[#0F1320] p-2 space-y-2 group shadow-xl">
         <div class="flex items-center justify-between text-[11px] text-white/70">
-          <span class="font-bold text-[#FF4D8D] flex items-center gap-1">🪄 Отредактировано ИИ</span>
-          <span class="text-white/40 truncate max-w-[150px]">${editPrompt}</span>
+          <span class="font-bold text-[#FF4D8D]">🪄 Отредактировано</span>
+          <span class="text-white/40">${editPrompt}</span>
         </div>
         <div class="grid grid-cols-2 gap-2">
-          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-white/10">
-            <span class="absolute top-1.5 left-1.5 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-white/70 font-mono">До</span>
-            <img src="${uploadedBase64}" class="w-full h-full object-cover">
-          </div>
-          <div class="relative aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#00D492]/40">
-            <span class="absolute top-1.5 left-1.5 text-[9px] bg-[#00D492]/90 px-1.5 py-0.5 rounded text-black font-bold font-mono">После</span>
-            <img src="${imageUrl}" class="w-full h-full object-cover">
-          </div>
+          <div class="aspect-square rounded-lg overflow-hidden bg-black/40"><img src="${uploadedPhotoBase64}" class="w-full h-full object-cover"></div>
+          <div class="aspect-square rounded-lg overflow-hidden bg-black/40 border border-[#00D492]"><img src="${url}" class="w-full h-full object-cover"></div>
         </div>
-        <div class="flex gap-2 pt-1">
-          <button onclick="insertImage('${imageUrl}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white flex items-center justify-center gap-1">
-            <span>✦</span> Вставить в сайт
-          </button>
-          <a href="${imageUrl}" target="_blank" download="edited-photo.png" class="btn-ghost px-3 py-2 rounded-lg text-[11px] font-medium text-white/80 hover:text-white flex items-center justify-center">
-            Открыть ↗
-          </a>
+        <div class="flex gap-2">
+          <button onclick="insertImage('${url}')" class="flex-1 btn-primary py-2 rounded-lg text-[11px] font-bold text-white">✦ Вставить в сайт</button>
+          <a href="${url}" target="_blank" download class="btn-ghost px-3 py-2 rounded-lg text-[11px] text-white/80">Открыть ↗</a>
         </div>
       </div>
     `);
-
-    toast('Фото успешно отредактировано! 🪄', '✅');
-  }catch(e){
-    clearInterval(timerInterval);
-    document.getElementById(placeholderId)?.remove();
-    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
+    toast('Фото готово! 🪄', '✅');
+  } catch(e) {
     toast(e.message, '❌');
-    console.error('AI Photoshop Error:', e);
+  } finally {
+    if(btn){ btn.disabled = false; btn.innerHTML = '🪄 Изменить'; }
   }
 }
-
-// ---------- Chat Credits Counter ----------
-function updateChatCreditsUI(){
-  const isOwner = checkIsOwner();
-  const display = document.getElementById('chatCreditsDisplay');
-  if(!display) return;
-  
-  if(isOwner){
-    display.textContent = '👑 VIP Безлимит';
-    display.className = 'text-[11px] px-2.5 py-0.5 rounded-full bg-[#D4AF37]/20 text-[#FFE17B] font-mono border border-[#D4AF37]/50 font-bold';
-  } else {
-    const left = parseInt(localStorage.getItem('guest_chat_credits') ?? '3');
-    display.textContent = `Осталось правок: ${Math.max(0, left)}`;
-    display.className = `text-[11px] px-2 py-0.5 rounded-full ${left > 0 ? 'bg-[#6C5CFF]/20 text-[#8B7DFF]' : 'bg-red-500/20 text-red-400'} font-mono border border-current font-bold`;
-  }
-}
-setTimeout(updateChatCreditsUI, 300);
-setTimeout(()=>setSpeedMode(currentSpeedMode), 100);
-
-// Wrap sendChat with credit checks
-const baseSendChat = sendChat;
-sendChat = async function(){
-  if(!checkIsOwner()){
-    let left = parseInt(localStorage.getItem('guest_chat_credits') ?? '3');
-    if(left <= 0){
-      openPricingModal();
-      return toast('Правки по бесплатному тарифу закончились. Выберите тариф!', '💳');
-    }
-    localStorage.setItem('guest_chat_credits', String(left - 1));
-    updateChatCreditsUI();
-  }
-  return baseSendChat();
-};
 
 </script>
 
