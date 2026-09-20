@@ -784,15 +784,37 @@ async function callGenerateAPI(data){
 Твоя задача: сгенерировать ОДИН ПОЛНЫЙ, рабочий HTML файл сайта со всеми стилями и скриптами.
 ТРЕБОВАНИЯ:
 1. Используй Tailwind CSS CDN, Google Fonts, Lucide Icons или Font Awesome, GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
-2. Картинки: реальные качественные фото с https://images.unsplash.com по теме ниши.
-3. ВАЖНО ПО ТИПУ САЙТА:
-   - Если тип сайта 'multipage' (Многостраничный): сделай полноценную архитектуру страниц внутри одного файла! Создай разделы (Главная, Каталог/Услуги, О компании, Отзывы, Контакты). В шапке сайта сделай меню, при клике на пункты меню через JavaScript переключай страницы (плавно показывай активный раздел, скрывай остальные). Сделай так, чтобы пользователь кликал по меню и видел смену страниц, как на полноценном многостраничном портале!
+2. КАРТИНКИ (СТРОГО 100% РАБОЧИЕ):
+   - Используй ТОЛЬКО проверенные реальные CDN ссылки Unsplash с точными параметрами fit=crop, например:
+     https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1200&auto=format&fit=crop&q=80
+     https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop&q=80
+     https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=800&auto=format&fit=crop&q=80
+     https://images.unsplash.com/photo-1581092160607-ee22621dd758?w=800&auto=format&fit=crop&q=80
+     https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&auto=format&fit=crop&q=80
+     https://images.unsplash.com/photo-1542744173-8e7e53415bb0?w=800&auto=format&fit=crop&q=80
+   - На каждое изображение ВСЕГДА добавляй fallback: onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&fit=crop';" чтобы картинки никогда не были пустыми!
+   - НИКОГДА не выдумывай несуществующие ID фотографий!
+
+3. УМНОЕ ОПРЕДЕЛЕНИЕ МНОГОСТРАНИЧНОСТИ:
+   - Если запрос подразумевает несколько страниц, разделов, каталог или выбран multipage: ОБЯЗАТЕЛЬНО сделай переключение страниц прямо внутри одного файла (SPA-архитектура)!
+   - Создай разделы: <div id="page-home" class="page-view">, <div id="page-catalog" class="page-view hidden">, <div id="page-about" class="page-view hidden">, <div id="page-reviews" class="page-view hidden">, <div id="page-contacts" class="page-view hidden">.
+   - Сделай в шапке и мобильном меню функцию showPage(pageId), которая плавно скрывает текущую страницу, показывает выбранную и прокручивает наверх window.scrollTo({top:0, behavior:'smooth'}).
+   - Все ссылки меню и кнопки перехода обязаны вызывать showPage('...') без перезагрузки!
    - Если тип 'landing': сделай длинный продающий одностраничник с плавным якорным скроллом.
    - Если тип 'ecommerce': подробный каталог карточек с ценами, фильтрацией, корзиной/модалкой заказа.
 4. Стиль: ${data.style}, Цвета: ${data.colors || 'подбери премиальную гармоничную палитру под нишу'}.
 5. Форма заявки: рабочая имитация отправки с всплывающим окном благодарности.
 6. Мобильная адаптивность: 100% идеальный вид на смартфонах и планшетах.
 7. Верни ТОЛЬКО чистый HTML код, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
+
+  // Автоопределение многостраничности из текста запроса пользователя
+  const promptLower = (data.prompt || '').toLowerCase();
+  const isMulti = promptLower.includes('многостранич') || promptLower.includes('несколько страниц') || promptLower.includes('раздел') || promptLower.includes('каталог') || data.site_type === 'multipage';
+  if(isMulti) {
+    data.site_type = 'multipage';
+  }
+  // Для сложных и многостраничных проектов автоматически выбираем мощнейшую модель для фронтенда
+  const activeModel = isMulti ? 'anthropic/claude-sonnet-4-5' : (model || 'anthropic/claude-sonnet-4-5');
 
   const user = `Название: ${data.site_name}
 Сфера: ${data.business_type}
@@ -805,7 +827,7 @@ async function callGenerateAPI(data){
   const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
     method:'POST',
     headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.85, max_tokens:16000})
+    body: JSON.stringify({model: activeModel, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.85, max_tokens:16000})
   });
   if(!resp.ok){
     const err = await resp.text();
