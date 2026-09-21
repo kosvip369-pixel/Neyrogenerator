@@ -164,7 +164,7 @@ def main():
         '''    <div class="flex items-center gap-2">
       <button type="button" onclick="loadExample()"''',
         '''    <div class="flex items-center gap-2">
-      <span id="keyPill" class="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-white/5 border-white/10">ключ…</span>
+      <button type="button" id="keyPill" onclick="openKeyModal()" class="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-white/5 border-white/10 cursor-pointer hover:brightness-125 transition">ключ…</button>
       <span id="balancePill" class="hidden px-2.5 py-1 rounded-full text-[11px] font-mono glass">Баланс —</span>
       <button type="button" onclick="loadExample()"''',
         "индикаторы ключа и баланса")

@@ -105,13 +105,24 @@ function saveKeyValue(k) {
   return true;
 }
 function updateKeyUI() {
-  var k = getKey();
-  var mine = isOwnKey();
   var pill = $('keyPill'); if (!pill) return;
+  var mine = isOwnKey();
+
+  // работа через сервер: ключ вообще не покидает сервер
+  if (typeof isProxied === 'function' && isProxied()) {
+    var lim = (window.__serverInfo && window.__serverInfo.limits) || {};
+    pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#00D9FF]/15 border-[#00D9FF]/40 text-[#00D9FF]';
+    pill.textContent = '🛡 сервер' + (lim.daily_rub ? ' · лимит ' + lim.daily_rub + ' ₽/день' : '');
+    pill.title = 'Запросы идут через серверную часть: ключ Polza не виден посетителям.' +
+      (lim.daily_rub ? ' Израсходовано сегодня: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '');
+    return;
+  }
+
   pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border ' +
     (mine ? 'bg-[#00D492]/15 border-[#00D492]/40 text-[#00D492]' : 'bg-[#FFE17B]/15 border-[#FFE17B]/40 text-[#FFE17B]');
-  pill.textContent = mine ? '🔑 мой ключ' : '👑 ключ владельца';
-  pill.title = mine ? 'Генерация идёт на вашем ключе Polza AI' : 'Сейчас используется ключ владельца сайта. Можно вставить свой.';
+  pill.textContent = mine ? '🔑 мой ключ' : '🔑 ключ не задан';
+  pill.title = mine ? 'Генерация идёт на вашем ключе Polza AI — он хранится только в вашем браузере.'
+                    : 'Нажмите, чтобы вставить свой ключ Polza AI. Без него генерация недоступна.';
 }
 
 /* ----------------------------- БЭКЕНД (необязательно) ----------------------------- */

@@ -591,6 +591,15 @@ function photoKeysState() {
   el.textContent = names.length ? 'подключено: ' + names.join(', ') : 'ключи не заданы — работают бесплатные источники';
   have.forEach(function (pr) { var i = $(pr[0]); if (i && !i.value) i.value = lsGet(pr[1], ''); });
 }
+/* Открыть окно ввода ключа (по клику на индикатор в шапке). */
+function openKeyModal() {
+  var m = $('keyModal');
+  if (!m) return;
+  var saved = lsGet(CONFIG.LS_KEY, '');
+  ['polzaKey', 'polzaKeyMobile', 'keyModalInput'].forEach(function (id) { if ($(id)) $(id).value = saved || ''; });
+  m.classList.remove('hidden');
+  setTimeout(function () { var i = $('keyModalInput'); if (i) i.focus(); }, 120);
+}
 function openPricingModal() { var m = $('pricingModal'); if (m) m.classList.remove('hidden'); }
 function checkOwnerAuth() {
   var isOwner = lsGet(CONFIG.LS_OWNER, '') === 'true';
