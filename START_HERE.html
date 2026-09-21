@@ -21,7 +21,7 @@
           1. Открой <a href="https://polza.ai/register" target="_blank" class="text-[#8B7DFF] underline">https://polza.ai/register</a><br>
           2. Регистрация 30 сек (почта+пароль)<br>
           3. Пополни 100₽ (хватит на 20 сайтов) — оплата РФ картой<br>
-          4. Dashboard → API Keys → Create Key → скопируй <code class="bg-black/40 px-2 py-0.5 rounded">sk-polza-...</code>
+          4. Dashboard → API Keys → Create Key → скопируй <code class="bg-black/40 px-2 py-0.5 rounded">pza_...</code>
         </div>
         <a href="https://polza.ai/register" target="_blank" class="mt-3 inline-block bg-[#6C5CFF] text-white px-5 py-2.5 rounded-xl font-bold">Получить ключ →</a>
       </div>
@@ -30,7 +30,7 @@
         <div class="font-bold mb-2">Шаг 2: Открой генератор</div>
         <div class="text-[14px] text-white/70">
           Открой файл <b>generator.html</b> (скачай его) или по ссылке:<br>
-          <code class="bg-black/40 px-2 py-1 rounded text-[12px] block mt-2 break-all">https://kosvip369-pixel.github.io/neuralead-demo-bot/generator.html</code><br>
+          <code class="bg-black/40 px-2 py-1 rounded text-[12px] block mt-2 break-all">https://kosvip369-pixel.github.io/Neyrogenerator/generator.html</code><br>
           <span class="text-[12px] text-white/50">Если GitHub Pages не включен — просто открой generator.html двойным кликом с компьютера, он работает без сервера!</span>
         </div>
       </div>
@@ -42,15 +42,15 @@
           <div class="w-3 h-3 rounded-full bg-[#FF4D8D] animate-pulse"></div>
           <div class="flex-1">
             <div class="text-[11px] text-white/40 font-mono">ПОЛЕ В ШАПКЕ САЙТА, СПРАВА ВВЕРХУ:</div>
-            <div class="font-mono text-[13px] mt-1">🔑 [_________________ sk-polza-... _________________] [👁] [OK]</div>
+            <div class="font-mono text-[13px] mt-1">🔑 [_________________ pza_... _________________] [👁] [OK]</div>
           </div>
         </div>
         <div class="mt-3 text-[13px] text-white/70">
-          В шапке генератора, справа вверху, есть поле с иконкой 🔑 и плейсхолдером <b>"Polza API ключ (sk-polza-...)"</b><br>
+          В шапке генератора, справа вверху, есть поле с иконкой 🔑 и плейсхолдером <b>"Polza API ключ (pza_...)"</b><br>
           <b>Вставь туда ключ и нажми OK</b> — индикатор станет зеленым ●
         </div>
         <div class="mt-3">
-          <input id="demoKey" type="text" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4" placeholder="sk-polza-..." class="w-full bg-[#070A12] border border-white/10 rounded-xl px-4 py-3 font-mono text-[14px]">
+          <input id="demoKey" type="text" value="ВСТАВЬТЕ_СВОЙ_КЛЮЧ_POLZA" placeholder="pza_..." class="w-full bg-[#070A12] border border-white/10 rounded-xl px-4 py-3 font-mono text-[14px]">
           <button onclick="if(document.getElementById('demoKey').value){localStorage.setItem('polza_key',document.getElementById('demoKey').value); alert('Ключ сохранен! Теперь открой generator.html и он подхватится автоматически');}else{alert('Вставь ключ!')}" class="mt-2 w-full bg-[#6C5CFF] text-white py-3 rounded-xl font-bold">💾 Сохранить ключ (для теста)</button>
         </div>
       </div>
@@ -76,6 +76,12 @@
     Файл generator.html работает без сервера, напрямую с Polza AI<br>
     Ключ хранится только у тебя в браузере (localStorage)
   </div>
+</div>
+
+<div class="mt-6 text-[13px] text-white/50 leading-relaxed">
+  <b class="text-white/80">Важно про безопасность.</b> Ключ, вставленный в код сайта, виден всем посетителям —
+  его украдут и потратят ваш баланс. Если генератор нужен для клиентов, запускайте серверную часть
+  (<code class="bg-black/40 px-1.5 py-0.5 rounded">generator_server.py</code>): она держит ключ у себя и не отдаёт его браузеру.
 </div>
 </body>
 </html>

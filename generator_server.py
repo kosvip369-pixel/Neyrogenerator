@@ -1,666 +1,450 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-NeuraSite AI - Генератор сайтов на Polza AI
-Backend: FastAPI + Polza AI proxy
+NeuraSite AI — серверная часть (необязательная).
 
-Запуск:
-pip install fastapi uvicorn openai httpx python-multipart
-POLZA_API_KEY=... python generator_server.py
-или
-uvicorn generator_server:app --host 0.0.0.0 --port 8000 --reload
+Зачем она нужна:
+  1) Скрыть ключ Polza AI от посетителей (в браузерной версии ключ виден всем).
+  2) Искать фотографии серверно через Unsplash / Pexels / Pixabay, если заданы их ключи.
+  3) Раздавать сам генератор и отдавать прокси к API Polza.
+
+Запуск:      uvicorn generator_server:app --host 0.0.0.0 --port 8000
+Переменные:  POLZA_API_KEY, UNSPLASH_ACCESS_KEY, PEXELS_API_KEY, PIXABAY_API_KEY, ALLOW_OWN_KEY=0
 """
-
-import os
+import base64
+import hashlib
 import json
+import os
 import re
-import asyncio
-from typing import Optional, List, Dict, Any
-from pathlib import Path
+import time
+import urllib.parse
+from typing import Any, Dict, List, Optional
 
+import httpx
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-import httpx
-from openai import AsyncOpenAI
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 
-# ---------- Конфиг ----------
-POLZA_API_KEY = os.environ.get("POLZA_API_KEY", "") or os.environ.get("DEEPSEEK_API_KEY", "") or "pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4"
-POLZA_BASE_URL = os.environ.get("POLZA_BASE_URL", "https://polza.ai/api/v1")
-PORT = int(os.environ.get("PORT", 8000))
+POLZA_BASE = os.environ.get("POLZA_BASE", "https://polza.ai/api/v1")
+POLZA_API_KEY = os.environ.get("POLZA_API_KEY", "").strip()
+UNSPLASH_ACCESS_KEY = os.environ.get("UNSPLASH_ACCESS_KEY", "").strip()
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "").strip()
+PIXABAY_API_KEY = os.environ.get("PIXABAY_API_KEY", "").strip()
 
-# Модели по умолчанию - рекомендации с polza.ai
-DEFAULT_TEXT_MODEL = anthropic/claude-sonnet-4-5
-DEFAULT_IMAGE_MODEL = "bytedance/seedream-4.5"
-FALLBACK_MODELS = [
-    "anthropic/claude-sonnet-4-5",
-    "openai/gpt-5",
-    "google/gemini-2.5-pro",
-    "deepseek/deepseek-v3.2",
-    "qwen/qwen3-235b-a22b:free",
-]
+# Разрешить посетителям использовать свой ключ Polza (заголовок X-Polza-Key).
+ALLOW_OWN_KEY = os.environ.get("ALLOW_OWN_KEY", "1") not in ("0", "false", "False")
 
-# ---------- FastAPI ----------
-app = FastAPI(title="NeuraSite AI Generator", version="2.0")
+# Модели по умолчанию (проверены в каталоге Polza 21.09.2026).
+DEFAULT_TEXT_MODEL = os.environ.get("DEFAULT_TEXT_MODEL", "anthropic/claude-sonnet-4.5")
+DEFAULT_REFINE_MODEL = os.environ.get("DEFAULT_REFINE_MODEL", "anthropic/claude-haiku-4.5")
+DEFAULT_IMAGE_MODEL = os.environ.get("DEFAULT_IMAGE_MODEL", "google/gemini-2.5-flash-image")
 
+ROOT = os.path.dirname(os.path.abspath(__file__))
+
+app = FastAPI(title="NeuraSite AI backend", version="2.0")
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    CORSMiddleware, allow_origins=["*"], allow_credentials=False,
+    allow_methods=["*"], allow_headers=["*"], expose_headers=["*"],
 )
 
-# ---------- Polza Client ----------
-def get_polza_client(api_key: Optional[str] = None):
-    key = api_key or POLZA_API_KEY
-    if not key:
-        return None
-    return AsyncOpenAI(api_key=key, base_url=POLZA_BASE_URL)
+TIMEOUT = httpx.Timeout(600.0, connect=30.0)
 
-# ---------- System Prompts ----------
-SITE_GENERATION_PROMPT = """Ты — элитный веб-дизайнер уровня Apple, Stripe, Linear, Vercel + senior frontend-разработчик.
 
-Твоя задача: сгенерировать ОДИН ПОЛНЫЙ HTML файл сайта по запросу пользователя.
+def pick_key(request: Request) -> str:
+    """Ключ сервера либо ключ посетителя (если разрешено)."""
+    own = (request.headers.get("X-Polza-Key") or "").strip()
+    if own and ALLOW_OWN_KEY:
+        return own
+    if POLZA_API_KEY:
+        return POLZA_API_KEY
+    if own:
+        return own
+    raise HTTPException(status_code=401, detail="Не задан POLZA_API_KEY на сервере и не передан X-Polza-Key")
 
-ТРЕБОВАНИЯ К КОДУ:
-1. **Один файл**: весь HTML, CSS, JS внутри одного файла. Никаких внешних файлов кроме CDN.
-2. **CDN разрешены**: 
-   - Tailwind CSS: https://cdn.tailwindcss.com
-   - Google Fonts (Inter, Manrope, Space Grotesk, JetBrains Mono)
-   - Lucide Icons или Font Awesome
-   - GSAP для анимаций: https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger
-   - AOS необязательно, лучше чистый IntersectionObserver + GSAP
 
-3. **Дизайн уровня Dribbble Top 1%**:
-   - Современный, чистый, дорогой вид
-   - Glassmorphism, неоморфизм, градиенты, blur эффекты где уместно
-   - Идеальная типографика: заголовки 48-72px, плотный трекинг
-   - Микро-анимации на все интерактивные элементы
-   - Скругления 16-24px, мягкие тени
-   - Темная или светлая тема в зависимости от ниши, но всегда премиум
+def polza_error(resp: httpx.Response) -> HTTPException:
+    text = resp.text[:400]
+    try:
+        body = resp.json()
+        msg = body.get("error", {}).get("message") or body.get("detail") or text
+    except Exception:
+        msg = text
+    return HTTPException(status_code=resp.status_code, detail=f"Polza API: {msg}")
 
-4. **Мобильное меню и интерактив ОБЯЗАТЕЛЬНО РАБОЧИЕ**:
-   - Кнопка гамбургер id="mobileMenuBtn" и меню id="mobileMenu" с кнопкой закрытия id="closeMobileMenu" ОБЯЗАНЫ иметь рабочий JS код:
-     const mBtn = document.getElementById('mobileMenuBtn');
-     const mMenu = document.getElementById('mobileMenu');
-     const cBtn = document.getElementById('closeMobileMenu');
-     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
-     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
-     document.querySelectorAll('#mobileMenu a').forEach(a => { a.onclick = () => mMenu && mMenu.classList.add('hidden'); });
-   - Если указан многостраничный сайт (multipage): сделай переключение экранов страниц через showPage('home'/'catalog'/'about'/'contacts').
 
-5. **Анимации ОБЯЗАТЕЛЬНО**:
-   - Появление секций при скролле (fade-up, stagger)
-   - Параллакс для hero
-   - Hover эффекты с transform и transition
-   - Плавный скролл
-   - Анимированные градиенты, floating элементы
-   - Кнопки с эффектом магнита или shine
-
-5. **Картинки**:
-   - Используй https://images.unsplash.com/photo-xxx?w=1200&h=800&fit=crop с релевантными запросами
-   - Для бизнеса: подбери реальные фото по теме (например для ресторана - еда, интерьер)
-   - Добавь alt тексты
-   - Используй object-cover, aspect-ratio
-
-6. **Тип сайта и многостраничность**:
-   - Если указан 'Многостраничный' (multipage) или в запросе есть страницы: КАТЕГОРИЧЕСКИ ЗАПРЕЩЕНО делать одностраничник! ОБЯЗАТЕЛЬНО сделай полноценную архитектуру страниц (Главная, Каталог, О компании, Отзывы, Контакты) через <section id="page-home" class="page-view active min-h-screen">, <section id="page-catalog" class="page-view hidden min-h-screen"> и т.д. В меню шапки и мобильного меню повесь вызов showPage('catalog') и напиши работающую функцию window.showPage(pageId) которая скрывает все .page-view, открывает выбранную секцию и делает scroll(0, 0). При клике на меню страницы должны реально переключаться!
-   - Если 'Лендинг' (landing): продающий одностраничник с якорным плавным скроллом.
-   - Если 'Каталог' / 'Магазин': подробный каталог с карточками товаров, ценами и кнопками заказа.
-
-7. **Структура сайта**:
-   - Header с логотипом и навигацией (sticky, blur)
-   - Hero с мощным заголовком, подзаголовком, CTA, визуалом
-   - Преимущества / фичи (3-6 карточек)
-   - О компании / продукт
-   - Соцдоказательства (отзывы, цифры, логотипы)
-   - Тарифы или каталог
-   - FAQ
-   - Контакты + форма + карта
-   - Footer
-
-7. **Интерактив**:
-   - Мобильное меню
-   - Форма с валидацией (имитация отправки)
-   - FAQ аккордеон
-   - Плавные якорные ссылки
-   - Модалки если нужно
-
-8. **Контакты**: используй данные которые дал пользователь. Если не дал - придумай реалистичные.
-
-9. **Русский язык** по умолчанию, если не указано иное.
-
-10. **Код должен быть рабочим сразу** - открываешь файл и все работает, без ошибок.
-
-11. **НЕ ПИШИ** никаких объяснений, только HTML код. Начни с <!DOCTYPE html>
-
-СТИЛИ:
-- Если пользователь выбрал стиль, строго следуй ему:
-  - Минимализм: много воздуха, ч/б, тонкие линии
-  - Glassmorphism: полупрозрачность, backdrop-blur, градиенты
-  - Неоморфизм: мягкие тени, выдавленные элементы
-  - Брутализм: жирные шрифты, резкие углы, контраст
-  - Luxury: золото, темный фон, serif шрифты
-  - Cyberpunk: неон, темный, tech
-  - Corporate: синий, чистый, доверительный
-  - Startup: яркий, градиенты, дружелюбный
-
-ФОРМАТ ОТВЕТА: Только HTML код, без markdown оберток, без ```html
-"""
-
-REFINE_PROMPT = """Ты — ведущий Senior Frontend Архитектор и дизайнер уровня Apple/Linear.
-Тебе дают:
-1. Текущий HTML код сайта
-2. Запрос пользователя что изменить / исправить / добавить
-
-ТВОЯ ЗАДАЧА: внести требуемые изменения и вернуть ПОЛНЫЙ, 100% РАБОЧИЙ HTML файл.
-
-КРИТИЧЕСКИ ВАЖНЫЕ ПРАВИЛА:
-1. ЕСЛИ ПРОСЯТ СДЕЛАТЬ МНОГОСТРАНИЧНЫЙ САЙТ (или разделить на страницы):
-   - Перестрой структуру сайта в полноценный SPA (Single Page Application)!
-   - Сделай отдельные экраны страниц:
-     * id="page-home" (Главная страница)
-     * id="page-catalog" (Каталог / Услуги / Проекты с ценами и фильтрами)
-     * id="page-about" (О компании / Команда / Гарантии)
-     * id="page-reviews" (Отзывы и выполненные объекты)
-     * id="page-contacts" (Контакты / Форма заявки / Карта)
-   - В шапке сайта меню должно вызывать функцию showPage('catalog') и переключать страницы!
-   - Добавь рабочий JS:
-     function showPage(pageId){
-       document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
-       const target = document.getElementById('page-' + pageId);
-       if(target){ target.classList.remove('hidden'); window.scrollTo({top:0, behavior:'smooth'}); }
-       const mMenu = document.getElementById('mobileMenu');
-       if(mMenu) mMenu.classList.add('hidden');
-     }
-   - При первом открытии показывать страницу 'home'.
-
-2. ЕСЛИ ПРОСЯТ ПОЧИНИТЬ МЕНЮ (ИЛИ МОБИЛЬНОЕ МЕНЮ):
-   - Кнопка мобильного меню ОБЯЗАНА 100% работать!
-   - Структура в шапке:
-     <button id="mobileMenuBtn" class="lg:hidden ...">☰</button>
-     <div id="mobileMenu" class="hidden fixed inset-0 z-50 bg-slate-950/95 backdrop-blur-xl p-6 flex flex-col items-center justify-center gap-6">
-       <button id="closeMobileMenu" class="absolute top-6 right-6 text-2xl text-white">✕</button>
-       <a href="#..." class="mobile-nav-link text-2xl">...</a>
-     </div>
-   - Внизу в скрипте:
-     const mBtn = document.getElementById('mobileMenuBtn');
-     const mMenu = document.getElementById('mobileMenu');
-     const cBtn = document.getElementById('closeMobileMenu');
-     if(mBtn && mMenu){ mBtn.onclick = () => mMenu.classList.toggle('hidden'); }
-     if(cBtn && mMenu){ cBtn.onclick = () => mMenu.classList.add('hidden'); }
-     document.querySelectorAll('#mobileMenu a, .mobile-nav-link').forEach(link => {
-       link.onclick = () => mMenu && mMenu.classList.add('hidden');
-     });
-
-3. ПРАВИЛА КОДА:
-   - Верни ПОЛНЫЙ HTML файл, начав сразу с <!DOCTYPE html>.
-   - НЕ обрезай код, сохрани все стили Tailwind, Google Fonts и GSAP анимации.
-   - Никаких пояснений, только чистый HTML код.
-"""
-
-# ---------- Models ----------
-class GenerateRequest(BaseModel):
-    prompt: str
-    site_name: Optional[str] = "NeuraSite"
-    business_type: Optional[str] = ""
-    site_type: Optional[str] = "landing"
-    style: Optional[str] = "modern"
-    colors: Optional[str] = ""
-    contacts: Optional[Dict[str, str]] = None
-    features: Optional[List[str]] = None
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-
-class RefineRequest(BaseModel):
-    current_html: str
-    message: str
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-
-class ImageGenRequest(BaseModel):
-    prompt: str
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    size: Optional[str] = "1024x1024"
-
-class ImageSearchRequest(BaseModel):
-    query: str
-    count: Optional[int] = 6
-
-# ---------- Helpers ----------
-def build_generation_user_message(req: GenerateRequest) -> str:
-    contacts_str = ""
-    if req.contacts:
-        contacts_str = "\n".join([f"- {k}: {v}" for k, v in req.contacts.items() if v])
-    
-    features_str = ", ".join(req.features) if req.features else "базовые"
-
-    return f"""
-ЗАДАЧА: Создай сайт
-
-Название/Компания: {req.site_name}
-Сфера: {req.business_type}
-Тип сайта: {req.site_type}
-Стиль дизайна: {req.style}
-Цветовая схема: {req.colors or 'подбери сам премиум палитру под нишу'}
-Фичи: {features_str}
-
-Контакты:
-{contacts_str or 'придумай реалистичные'}
-
-Описание от пользователя:
-{req.prompt}
-
-СГЕНЕРИРУЙ ПОЛНЫЙ HTML ФАЙЛ СЕЙЧАС. Только код, без объяснений.
-"""
-
-async def call_polza_chat(messages: List[Dict], model: str, api_key: Optional[str] = None, temperature: float = 0.8, max_tokens: int = 16000) -> str:
-    client = get_polza_client(api_key)
-    if not client:
-        raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен. Укажите ключ в .env или в запросе.")
-    
-    # Попробуем каскад моделей если основная не сработала
-    models_to_try = [model] + [m for m in FALLBACK_MODELS if m != model]
-    
-    last_error = None
-    for m in models_to_try[:3]:  # пробуем 3 модели
-        try:
-            resp = await client.chat.completions.create(
-                model=m,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
-            )
-            content = resp.choices[0].message.content
-            # Очистим от markdown если есть
-            content = re.sub(r'^```html\s*', '', content, flags=re.MULTILINE)
-            content = re.sub(r'^```\s*', '', content, flags=re.MULTILINE)
-            content = re.sub(r'\s*```$', '', content, flags=re.MULTILINE)
-            return content.strip()
-        except Exception as e:
-            last_error = str(e)
-            print(f"Model {m} failed: {e}")
-            continue
-    
-    raise HTTPException(status_code=500, detail=f"Все модели упали. Последняя ошибка: {last_error}")
-
-# ---------- Routes ----------
+# --------------------------------------------------------------------------- #
+# Служебное
+# --------------------------------------------------------------------------- #
 @app.get("/health")
 async def health():
-    return {"status": "ok", "polza_configured": bool(POLZA_API_KEY), "base_url": POLZA_BASE_URL}
-
-@app.get("/api/models")
-async def get_models():
-    """Рекомендованные модели с Polza AI"""
     return {
-        "text_models": [
-            {
-                "id": "anthropic/claude-sonnet-4-5",
-                "name": "Claude Sonnet 4.5",
-                "best_for": "Фронтенд, дизайн, код - ЛУЧШИЙ ВЫБОР",
-                "price": "~$3 / 1M токенов",
-                "context": "200k",
-                "badge": "🔥 Рекомендуем"
-            },
-            {
-                "id": "openai/gpt-5",
-                "name": "GPT-5",
-                "best_for": "Сложные SaaS, логика, большие сайты",
-                "price": "~$5 / 1M",
-                "context": "400k",
-                "badge": "💎 Премиум"
-            },
-            {
-                "id": "google/gemini-2.5-pro",
-                "name": "Gemini 2.5 Pro",
-                "best_for": "Креатив, длинный контекст, мультимодальность",
-                "price": "~$2.5 / 1M",
-                "context": "1M",
-                "badge": "🎨 Креатив"
-            },
-            {
-                "id": "deepseek/deepseek-v3.2",
-                "name": "DeepSeek V3.2",
-                "best_for": "Быстро и дешево, хорошее качество",
-                "price": "~$0.5 / 1M",
-                "context": "128k",
-                "badge": "⚡ Быстро"
-            },
-            {
-                "id": "qwen/qwen3-235b-a22b:free",
-                "name": "Qwen3 235B",
-                "best_for": "Бесплатно, русский язык, лендинги",
-                "price": "FREE",
-                "context": "32k",
-                "badge": "🆓 Бесплатно"
-            },
-            {
-                "id": "anthropic/claude-haiku-4-5",
-                "name": "Claude Haiku 4.5",
-                "best_for": "Доработки в чате, быстрые правки",
-                "price": "~$1 / 1M",
-                "context": "200k",
-                "badge": "💬 Для чата"
-            }
-        ],
-        "image_models": [
-            {
-                "id": "bytedance/seedream-4.5",
-                "name": "Seedream 4.5",
-                "best_for": "Фотореализм, лучший общий",
-                "price": "~$0.05 / image",
-                "badge": "🔥 Топ"
-            },
-            {
-                "id": "openai/gpt-image-1.5",
-                "name": "GPT Image 1.5",
-                "best_for": "Иконки, иллюстрации, точность",
-                "price": "~$0.08 / image",
-                "badge": "🎯 Точность"
-            },
-            {
-                "id": "black-forest-labs/flux-2-pro",
-                "name": "Flux 2 Pro",
-                "best_for": "Фоны, быстро, дешево",
-                "price": "~$0.03 / image",
-                "badge": "⚡ Быстро"
-            },
-            {
-                "id": "google/nano-banana-pro",
-                "name": "Nano Banana Pro",
-                "best_for": "Редактирование, ретушь",
-                "price": "~$0.04 / image",
-                "badge": "✏️ Редактор"
-            }
-        ],
-        "video_models": [
-            {
-                "id": "bytedance/seedance-2.5",
-                "name": "Seedance 2.5",
-                "best_for": "Видео для hero, лучший",
-                "price": "~$0.20 / sec",
-                "badge": "🔥 Видео топ"
-            },
-            {
-                "id": "kuaishou/kling-3.0",
-                "name": "Kling 3.0",
-                "best_for": "Кинематографичность",
-                "price": "~$0.15 / sec",
-                "badge": "🎬 Кино"
-            },
-            {
-                "id": "alibaba/wan-3.0",
-                "name": "Wan 3.0",
-                "best_for": "Моушн графика",
-                "price": "~$0.12 / sec",
-                "badge": "✨ Моушн"
-            },
-            {
-                "id": "google/veo-3.1",
-                "name": "Veo 3.1",
-                "best_for": "Максимальное качество",
-                "price": "~$0.30 / sec",
-                "badge": "💎 Премиум"
-            }
-        ]
+        "ok": True,
+        "polza_key": bool(POLZA_API_KEY),
+        "own_key_allowed": ALLOW_OWN_KEY,
+        "photo_sources": {
+            "unsplash": bool(UNSPLASH_ACCESS_KEY),
+            "pexels": bool(PEXELS_API_KEY),
+            "pixabay": bool(PIXABAY_API_KEY),
+            "openverse": True,
+        },
+        "models": {"text": DEFAULT_TEXT_MODEL, "refine": DEFAULT_REFINE_MODEL, "image": DEFAULT_IMAGE_MODEL},
     }
 
-@app.post("/api/generate")
-async def generate_site(req: GenerateRequest):
-    model = req.model or DEFAULT_TEXT_MODEL
-    
-    messages = [
-        {"role": "system", "content": SITE_GENERATION_PROMPT},
-        {"role": "user", "content": build_generation_user_message(req)}
-    ]
-    
-    try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.85, max_tokens=16000)
-        
-        # Проверка что это HTML
-        if "<!DOCTYPE" not in html and "<html" not in html:
-            # Попробуем извлечь HTML из текста
-            match = re.search(r'<!DOCTYPE.*</html>', html, re.DOTALL | re.IGNORECASE)
-            if match:
-                html = match.group(0)
-        
-        return {"html": html, "model_used": model}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/refine")
-async def refine_site(req: RefineRequest):
-    model = req.model or "anthropic/claude-sonnet-4-5"  # для доработок быстрая модель
-    
-    # Ограничим размер HTML для контекста (если слишком большой - обрежем)
-    html_to_send = req.current_html
-    if len(html_to_send) > 80000:
-        # Оставим начало и конец, вырежем середину с пометкой
-        html_to_send = html_to_send[:40000] + "\n\n<!-- ... СЕРЕДИНА САЙТА СОКРАЩЕНА ДЛЯ ЭКОНОМИИ КОНТЕКСТА, НО ТЫ ДОЛЖЕН СОХРАНИТЬ ЕЕ ... -->\n\n" + html_to_send[-40000:]
-    
-    messages = [
-        {"role": "system", "content": REFINE_PROMPT},
-        {"role": "user", "content": f"Запрос на доработку: {req.message}\n\nТекущий HTML:\n{html_to_send}\n\nВерни ПОЛНЫЙ обновленный HTML."}
-    ]
-    
-    try:
-        html = await call_polza_chat(messages, model, req.api_key, temperature=0.7, max_tokens=16000)
-        return {"html": html, "model_used": model}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/api/generate-image")
-async def generate_image(req: ImageGenRequest):
-    key = req.api_key or POLZA_API_KEY
-    if not key:
-        raise HTTPException(status_code=400, detail="POLZA_API_KEY не установлен")
-    
-    model = req.model or "bytedance/seedream-4.5"
-    size = "1:1"  # Polza seedream requires 1:1, 16:9, etc.
-    
-    try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            init_res = await client.post(
-                "https://polza.ai/api/v1/images/generations",
-                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
-                json={"model": model, "prompt": req.prompt, "size": size, "n": 1}
-            )
-            if not init_res.is_success:
-                err_text = init_res.text
-                raise Exception(f"Polza API Error ({init_res.status_code}): {err_text}")
-            
-            init_data = init_res.json()
-            req_id = init_data.get("requestId") or init_data.get("id")
-            if not req_id:
-                # Direct url fallback if any
-                if "data" in init_data and init_data["data"]:
-                    return {"url": init_data["data"][0].get("url"), "model": model}
-                raise Exception(f"Не получен requestId: {init_data}")
-            
-            # Poll status
-            for _ in range(25):
-                await asyncio.sleep(2.0)
-                status_res = await client.get(
-                    f"https://polza.ai/api/v1/images/{req_id}",
-                    headers={"Authorization": f"Bearer {key}"}
-                )
-                if status_res.is_success:
-                    st_data = status_res.json()
-                    status = st_data.get("status")
-                    if status == "COMPLETED":
-                        image_url = st_data.get("url") or (st_data.get("images", [None])[0])
-                        return {"url": image_url, "model": model}
-                    elif status in ("FAILED", "CANCELED", "ERROR"):
-                        raise Exception(f"Генерация отклонена: {st_data}")
-            
-            raise Exception("Таймаут генерации изображения (больше 50 сек)")
-    except Exception as e:
-        print(f"Image generation error: {e}")
-        fallback_url = f"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=1024&h=1024&fit=crop"
-        return {"url": fallback_url, "error": str(e), "fallback": True}
-
-
-@app.post("/api/search-images")
-async def search_images(req: ImageSearchRequest):
-    """Поиск картинок - используем Unsplash Source + Picsum как фолбек, без ключа"""
-    query = req.query.strip()
-    # Формируем Unsplash URL - они работают без ключа для демо
-    # Используем source.unsplash.com альтернативу через unsplash.com/photos/random?query
-    images = []
-    # Генерим разные URL с рандомизацией
-    base_queries = [query, f"{query} business", f"{query} minimal", f"{query} aesthetic"]
-    
-    for i in range(req.count):
-        q = base_queries[i % len(base_queries)]
-        # Используем picsum + unsplash
-        if i % 2 == 0:
-            # Unsplash with query
-            encoded = q.replace(" ", ",")
-            url = f"https://images.unsplash.com/photo-{1550000000000 + i*12345}?w=800&h=600&fit=crop&q=80&auto=format"  # placeholder, заменим на рабочий поиск
-            # Реально рабочие unsplash фото по темам - маппинг
-            url = f"https://source.unsplash.com/800x600/?{encoded}&sig={i}"
-            # source.unsplash.com deprecated, используем unsplash api proxy через images.unsplash.com с поиском
-            # Лучше использовать lorem picsum + unsplash collection
-            url = f"https://picsum.photos/seed/{hash(q+str(i)) % 10000}/800/600"
-        else:
-            # Unsplash direct - используем известные фото ID для разных тем
-            topic_map = {
-                "business": "https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&h=600&fit=crop",
-                "restaurant": "https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=800&h=600&fit=crop",
-                "tech": "https://images.unsplash.com/photo-1518770660439-4636190af475?w=800&h=600&fit=crop",
-                "medical": "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=800&h=600&fit=crop",
-                "fitness": "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=800&h=600&fit=crop",
-                "beauty": "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&h=600&fit=crop",
-                "realty": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&h=600&fit=crop",
-                "education": "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&h=600&fit=crop",
-            }
-            # найдем ближайшее
-            found = None
-            for k, v in topic_map.items():
-                if k in q.lower():
-                    found = v
-                    break
-            url = found or f"https://images.unsplash.com/photo-1506744038136-46273834b3fb?w=800&h=600&fit=crop&ixid={i}"
-
-        images.append({
-            "url": url,
-            "query": q,
-            "source": "unsplash"
-        })
-    
-    # Добавим реальные unsplash URL для популярных запросов - чтобы точно работало
-    real_images = [
-        f"https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=600&fit=crop",
-        f"https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800&h=600&fit=crop",
-        f"https://images.unsplash.com/photo-1553877522-43269d4ea984?w=800&h=600&fit=crop",
-        f"https://images.unsplash.com/photo-1558655146-d09347e92766?w=800&h=600&fit=crop",
-        f"https://images.unsplash.com/photo-1551434678-e076c223a692?w=800&h=600&fit=crop",
-        f"https://images.unsplash.com/photo-1542744173-8e7e53415bb4?w=800&h=600&fit=crop",
-    ]
-    
-    for i in range(min(req.count, len(real_images))):
-        images[i]["url"] = real_images[i] + f"&q={query.replace(' ', '+')}"
-    
-    return {"images": images, "query": query}
-
-
-@app.get("/api/templates")
-async def get_templates():
-    tmpl_path = Path(__file__).parent / "templates.json"
-    if tmpl_path.exists():
-        with open(tmpl_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-
-# ---------- Publishing Endpoints ----------
-PUBLISHED_DIR = Path(__file__).parent / "published"
-PUBLISHED_DIR.mkdir(exist_ok=True)
-
-class PublishRequest(BaseModel):
-    html: str
-    slug: Optional[str] = None
-    site_name: Optional[str] = None
-
-@app.post("/api/publish")
-async def publish_site(req: PublishRequest, request: Request):
-    import uuid
-    slug = (req.slug or "").strip().lower()
-    slug = re.sub(r'[^a-z0-9_-]', '-', slug).strip('-')
-    if not slug:
-        name_slug = re.sub(r'[^a-zA-Z0-9_-]', '-', (req.site_name or "site").lower()).strip('-')
-        slug = f"{name_slug}-{uuid.uuid4().hex[:6]}" if name_slug else f"site-{uuid.uuid4().hex[:8]}"
-    
-    file_path = PUBLISHED_DIR / f"{slug}.html"
-    with open(file_path, "w", encoding="utf-8") as f:
-        f.write(req.html)
-    
-    base_url = str(request.base_url).rstrip('/')
-    return {
-        "status": "ok",
-        "slug": slug,
-        "path": f"/p/{slug}",
-        "full_url": f"{base_url}/p/{slug}"
-    }
-
-@app.get("/p/{slug}")
-async def view_published_site(slug: str):
-    clean_slug = re.sub(r'[^a-z0-9_-]', '', slug.lower())
-    file_path = PUBLISHED_DIR / f"{clean_slug}.html"
-    if file_path.exists():
-        with open(file_path, "r", encoding="utf-8") as f:
-            return HTMLResponse(content=f.read())
-    raise HTTPException(status_code=404, detail="Сайт не найден")
 
 @app.get("/")
+async def index():
+    path = os.path.join(ROOT, "index.html")
+    if os.path.exists(path):
+        return FileResponse(path)
+    return JSONResponse({"detail": "index.html не найден рядом с сервером"}, status_code=404)
 
 
-async def serve_index():
-    index_path = Path(__file__).parent / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return HTMLResponse("<h1>NeuraSite Generator - index.html not found</h1>")
+# --------------------------------------------------------------------------- #
+# Прокси к Polza (ключ остаётся на сервере)
+# --------------------------------------------------------------------------- #
+@app.post("/api/proxy/chat/completions")
+async def proxy_chat(request: Request):
+    body = await request.json()
+    body.setdefault("model", DEFAULT_TEXT_MODEL)
+    body.setdefault("max_tokens", 32000)
+    stream = bool(body.get("stream"))
+    headers = {"Authorization": f"Bearer {pick_key(request)}", "Content-Type": "application/json"}
 
-@app.get("/generator")
-async def serve_generator():
-    gen_path = Path(__file__).parent / "generator.html"
-    if gen_path.exists():
-        return FileResponse(gen_path)
-    index_path = Path(__file__).parent / "index.html"
-    if index_path.exists():
-        return FileResponse(index_path)
-    return HTMLResponse("<h1>Generator not found</h1>")
+    if stream:
+        async def gen():
+            async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+                async with client.stream("POST", f"{POLZA_BASE}/chat/completions", json=body, headers=headers) as resp:
+                    if resp.status_code >= 400:
+                        detail = (await resp.aread()).decode("utf-8", "replace")
+                        yield f"data: {json.dumps({'error': {'message': detail[:400]}}, ensure_ascii=False)}\n\n"
+                        return
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
-# Статика для старых лендингов
-@app.get("/old")
-async def serve_old():
-    old_path = Path(__file__).parent / "old-landing.html"
-    if old_path.exists():
-        return FileResponse(old_path)
-    return HTMLResponse("<h1>Old landing not found</h1>")
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{POLZA_BASE}/chat/completions", json=body, headers=headers)
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+@app.post("/api/proxy/images/generations")
+async def proxy_images(request: Request):
+    body = await request.json()
+    body.setdefault("model", DEFAULT_IMAGE_MODEL)
+    body.setdefault("n", 1)
+    body.setdefault("response_format", "url")
+    headers = {"Authorization": f"Bearer {pick_key(request)}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{POLZA_BASE}/images/generations", json=body, headers=headers)
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+@app.post("/api/proxy/media")
+async def proxy_media_create(request: Request):
+    body = await request.json()
+    body.setdefault("model", DEFAULT_IMAGE_MODEL)
+    headers = {"Authorization": f"Bearer {pick_key(request)}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{POLZA_BASE}/media", json=body, headers=headers)
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+@app.get("/api/proxy/media/{media_id}")
+async def proxy_media_status(media_id: str, request: Request):
+    headers = {"Authorization": f"Bearer {pick_key(request)}"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.get(f"{POLZA_BASE}/media/{media_id}", headers=headers)
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+@app.get("/api/proxy/models")
+async def proxy_models():
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.get(f"{POLZA_BASE}/models")
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+@app.get("/api/proxy/balance")
+async def proxy_balance(request: Request):
+    headers = {"Authorization": f"Bearer {pick_key(request)}"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.get(f"{POLZA_BASE}/balance", headers=headers)
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    return Response(content=resp.content, media_type="application/json")
+
+
+# --------------------------------------------------------------------------- #
+# Фотографии (серверный поиск: ключи остаются на сервере)
+# --------------------------------------------------------------------------- #
+ARCHIVE_WORDS = re.compile(
+    r"(18\d\d|19\d\d|20[0-1]\d|archiv|historic|engraving|etching|lithograph|drawing|sketch|painting|"
+    r"postcard|poster|stamp|manuscript|museum|memorial|monument|map of)", re.I)
+BAD_TITLE = re.compile(r"(logo|clipart|icon|diagram|chart|screenshot|scan of|document|signature|coat of arms|qr code)", re.I)
+_photo_cache: Dict[str, Dict[str, Any]] = {}
+
+
+def _clean(items: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+    out, seen, seen_titles = [], set(), set()
+    for it in items:
+        url = it.get("url")
+        if not url or not url.startswith("https://"):
+            continue
+        key = hashlib.md5(url.split("?")[0].lower().encode()).hexdigest()
+        title_key = re.sub(r"[^a-zа-я0-9]+", "", (it.get("title") or "").lower())[:45]
+        if key in seen or (title_key and title_key in seen_titles):
+            continue
+        seen.add(key)
+        if title_key:
+            seen_titles.add(title_key)
+        text = f"{it.get('title','')} {it.get('tags','')}"
+        if ARCHIVE_WORDS.search(text) or BAD_TITLE.search(text):
+            continue
+        w, h = it.get("width") or 0, it.get("height") or 0
+        if w and h and (w < 900 or h < 600):
+            continue
+        if re.search(r"\.(svg|gif|tif|tiff)(\?|$)", url, re.I):
+            continue
+        words = [w2 for w2 in query.lower().split() if len(w2) > 3]
+        score = sum(3 for w2 in words if w2 in text.lower())
+        if w >= 2400:
+            score += 2
+        elif w >= 1400:
+            score += 1.5
+        if w and h and 1.2 < w / h < 2.4:
+            score += 1
+        score += {"pexels": 3, "pixabay": 3, "unsplash": 3, "openverse": 1}.get(it.get("source", ""), 0)
+        it["score"] = score
+        out.append(it)
+    out.sort(key=lambda x: -x["score"])
+    return out
+
+
+async def _unsplash(client: httpx.AsyncClient, query: str, count: int) -> List[Dict[str, Any]]:
+    if not UNSPLASH_ACCESS_KEY:
+        return []
+    r = await client.get("https://api.unsplash.com/search/photos", params={
+        "query": query, "per_page": count, "orientation": "landscape"}, headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"})
+    if r.status_code != 200:
+        return []
+    return [{
+        "url": (p["urls"].get("regular") or p["urls"]["full"]), "thumb": p["urls"].get("small"),
+        "title": p.get("alt_description") or query, "author": (p.get("user") or {}).get("name", ""),
+        "source": "unsplash", "width": p.get("width"), "height": p.get("height"),
+    } for p in r.json().get("results", [])]
+
+
+async def _pexels(client: httpx.AsyncClient, query: str, count: int) -> List[Dict[str, Any]]:
+    if not PEXELS_API_KEY:
+        return []
+    r = await client.get("https://api.pexels.com/v1/search", params={
+        "query": query, "per_page": count, "orientation": "landscape"}, headers={"Authorization": PEXELS_API_KEY})
+    if r.status_code != 200:
+        return []
+    return [{
+        "url": (p["src"].get("large2x") or p["src"]["large"]), "thumb": p["src"].get("medium"),
+        "title": p.get("alt") or query, "author": p.get("photographer", ""),
+        "source": "pexels", "width": p.get("width"), "height": p.get("height"),
+    } for p in r.json().get("photos", [])]
+
+
+async def _pixabay(client: httpx.AsyncClient, query: str, count: int) -> List[Dict[str, Any]]:
+    if not PIXABAY_API_KEY:
+        return []
+    r = await client.get("https://pixabay.com/api/", params={
+        "key": PIXABAY_API_KEY, "q": query, "image_type": "photo", "orientation": "horizontal",
+        "safesearch": "true", "per_page": max(3, count)})
+    if r.status_code != 200:
+        return []
+    return [{
+        "url": h.get("largeImageURL") or h.get("webformatURL"), "thumb": h.get("webformatURL"),
+        "title": h.get("tags") or query, "author": h.get("user", ""),
+        "source": "pixabay", "width": h.get("imageWidth"), "height": h.get("imageHeight"),
+    } for h in r.json().get("hits", [])]
+
+
+async def _openverse(client: httpx.AsyncClient, query: str, count: int) -> List[Dict[str, Any]]:
+    r = await client.get("https://api.openverse.org/v1/images/", params={
+        "q": query, "page_size": min(20, count * 4), "license_type": "commercial", "mature": "false"})
+    if r.status_code != 200:
+        return []
+    return [{
+        "url": x.get("url"), "thumb": x.get("thumbnail") or x.get("url"),
+        "title": x.get("title") or query, "author": x.get("creator", ""), "source": "openverse",
+        "width": x.get("width"), "height": x.get("height"),
+        "tags": " ".join(t.get("name", "") if isinstance(t, dict) else str(t) for t in (x.get("tags") or [])),
+    } for x in r.json().get("results", [])]
+
+
+@app.get("/api/photos")
+async def photos(q: str, count: int = 8):
+    q = (q or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="Пустой запрос")
+    key = f"{q.lower()}|{count}"
+    hit = _photo_cache.get(key)
+    if hit and time.time() - hit["at"] < 3600:
+        return {"images": hit["images"], "cached": True}
+
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
+        import asyncio
+        results = await asyncio.gather(
+            _pexels(client, q, count), _unsplash(client, q, count), _pixabay(client, q, count),
+            return_exceptions=True)
+        items: List[Dict[str, Any]] = []
+        for r in results:
+            if isinstance(r, list):
+                items.extend(r)
+        items = _clean(items, q)
+        if len(items) < 3:
+            extra = await asyncio.gather(_openverse(client, q, count), return_exceptions=True)
+            for r in extra:
+                if isinstance(r, list):
+                    items.extend(_clean(r, q))
+            items = _clean(items, q)
+
+    images = items[:count]
+    if images:
+        _photo_cache[key] = {"at": time.time(), "images": images}
+    return {"images": images, "cached": False}
+
+
+# --------------------------------------------------------------------------- #
+# Генерация (серверные обёртки: браузерная версия делает это сама)
+# --------------------------------------------------------------------------- #
+@app.post("/api/generate")
+async def generate(payload: Dict[str, Any], request: Request):
+    prompt = (payload.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Пустой prompt")
+    system = payload.get("system") or "Ты senior frontend-разработчик. Верни только HTML-код страницы целиком."
+    key = pick_key(request)
+    body = {
+        "model": payload.get("model") or DEFAULT_TEXT_MODEL,
+        "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}],
+        "max_tokens": int(payload.get("max_tokens") or 32000),
+        "temperature": float(payload.get("temperature") or 0.8),
+    }
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{POLZA_BASE}/chat/completions", json=body,
+                                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    data = resp.json()
+    choice = (data.get("choices") or [{}])[0]
+    html = (choice.get("message") or {}).get("content", "")
+    return {"html": html, "model": body["model"], "finish_reason": choice.get("finish_reason"), "usage": data.get("usage")}
+
+
+@app.post("/api/refine")
+async def refine(payload: Dict[str, Any], request: Request):
+    current_html = payload.get("current_html") or ""
+    message = payload.get("message") or ""
+    if not current_html or not message:
+        raise HTTPException(status_code=400, detail="Нужны current_html и message")
+    key = pick_key(request)
+    body = {
+        "model": payload.get("model") or DEFAULT_REFINE_MODEL,
+        "messages": [
+            {"role": "system", "content": "Ты senior frontend. Верни ПОЛНЫЙ обновлённый HTML, сохранив всё остальное. Только код."},
+            {"role": "user", "content": f"Запрос: {message}\n\nТекущий HTML:\n{current_html[:400000]}\n\nВерни полный HTML."},
+        ],
+        "max_tokens": 32000, "temperature": 0.6,
+    }
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        resp = await client.post(f"{POLZA_BASE}/chat/completions", json=body,
+                                headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"})
+    if resp.status_code >= 400:
+        raise polza_error(resp)
+    data = resp.json()
+    return {"html": (data.get("choices") or [{}])[0].get("message", {}).get("content", ""), "model": body["model"]}
+
+
+@app.post("/api/generate-image")
+async def generate_image(payload: Dict[str, Any], request: Request):
+    prompt = (payload.get("prompt") or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Пустой prompt")
+    key = pick_key(request)
+    model = payload.get("model") or DEFAULT_IMAGE_MODEL
+    headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+    async with httpx.AsyncClient(timeout=TIMEOUT) as client:
+        start = await client.post(f"{POLZA_BASE}/images/generations",
+                                 json={"model": model, "prompt": prompt, "n": 1, "response_format": "url"}, headers=headers)
+        if start.status_code >= 400:
+            raise polza_error(start)
+        data = start.json()
+        media_id = data.get("requestId") or data.get("id")
+        direct = ((data.get("data") or [{}])[0] or {}).get("url")
+        if direct:
+            return {"url": direct, "model": model}
+        if not media_id:
+            raise HTTPException(status_code=502, detail=f"Неожиданный ответ Polza: {str(data)[:200]}")
+
+        deadline = time.time() + 240
+        while time.time() < deadline:
+            await __import__("asyncio").sleep(2.5)
+            st = await client.get(f"{POLZA_BASE}/media/{media_id}", headers={"Authorization": f"Bearer {key}"})
+            if st.status_code >= 400:
+                continue
+            sj = st.json()
+            if sj.get("status") == "completed":
+                url = ((sj.get("data") or [{}])[0] or {}).get("url")
+                if url:
+                    return {"url": url, "model": model, "cost_rub": (sj.get("usage") or {}).get("cost_rub")}
+                break
+            if sj.get("status") in ("failed", "cancelled"):
+                raise HTTPException(status_code=502, detail=f"Генерация не удалась: {str(sj.get('error'))[:200]}")
+    raise HTTPException(status_code=504, detail="Картинка не дождалась результата")
+
+
+# --------------------------------------------------------------------------- #
+# Публикация статики (простой вариант «опубликовать сайт»)
+# --------------------------------------------------------------------------- #
+SITES_DIR = os.environ.get("SITES_DIR", os.path.join(ROOT, "published_sites"))
+
+
+@app.post("/api/publish")
+async def publish(payload: Dict[str, Any]):
+    files = payload.get("files") or []
+    if isinstance(payload.get("html"), str):
+        files = [{"name": "index.html", "content": payload["html"]}] + files
+    files = [f for f in files if f.get("name") and isinstance(f.get("content"), str)]
+    if not files:
+        raise HTTPException(status_code=400, detail="Нет файлов для публикации")
+    slug = re.sub(r"[^a-z0-9-]", "", (payload.get("slug") or "").lower()) or hashlib.md5(
+        ("".join(f["content"] for f in files)).encode()).hexdigest()[:10]
+    target = os.path.join(SITES_DIR, slug)
+    os.makedirs(target, exist_ok=True)
+    for f in files:
+        name = os.path.basename(f["name"])
+        with open(os.path.join(target, name), "w", encoding="utf-8") as fh:
+            fh.write(f["content"])
+    return {"url": f"/p/{slug}/", "slug": slug, "files": [os.path.basename(f["name"]) for f in files]}
+
+
+@app.get("/p/{slug}/")
+@app.get("/p/{slug}/{filename}")
+async def published(slug: str, filename: str = "index.html"):
+    safe = os.path.basename(filename)
+    if "." not in safe:
+        safe += ".html"
+    path = os.path.join(SITES_DIR, os.path.basename(slug), safe)
+    if not os.path.exists(path):
+        raise HTTPException(status_code=404, detail="Страница не найдена")
+    return FileResponse(path, media_type="text/html; charset=utf-8")
+
 
 if __name__ == "__main__":
     import uvicorn
-    print(f"""
-╔════════════════════════════════════════════════╗
-║  NeuraSite AI - Генератор сайтов на Polza AI  ║
-║  Port: {PORT}                                  ║
-║  Polza Base: {POLZA_BASE_URL}                 ║
-║  Polza Key: {'SET' if POLZA_API_KEY else 'NOT SET - укажите в UI'}          ║
-╚════════════════════════════════════════════════╝
-
-Открой: http://localhost:{PORT}
-Docs: http://localhost:{PORT}/docs
-
-Рекомендуемые модели Polza AI:
-- Текст: anthropic/claude-sonnet-4-5 (лучший для фронта)
-- Картинки: bytedance/seedream-4.5
-- Видео: bytedance/seedance-2.5
-    """)
-    uvicorn.run(app, host="0.0.0.0", port=PORT)
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", "8000")))

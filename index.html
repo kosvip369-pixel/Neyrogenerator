@@ -7,198 +7,7 @@
 <meta name="description" content="AI-генератор сайтов на Polza AI. Опиши идею — получи готовый сайт с анимациями, картинками, адаптивом. Чат-доработка, генерация изображений, экспорт.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<script src="https://cdn.tailwindcss.com">
-// ---------- Voice Input (Голосовой ввод) ----------
-let currentSpeechRec = null;
-function startVoiceInput(inputId, btnId){
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRecognition){
-    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
-  }
-
-  const btn = document.getElementById(btnId);
-  const input = document.getElementById(inputId);
-  if(!btn || !input) return;
-
-  if(btn.dataset.recording === 'true'){
-    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
-    btn.dataset.recording = 'false';
-    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    toast('Запись остановлена', '⏹');
-    return;
-  }
-
-  try{
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ru-RU';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      btn.dataset.recording = 'true';
-      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
-      toast('Слушаю вас... Говорите', '🎙️');
-    };
-
-    recognition.onresult = (event) => {
-      const text = event.results[0][0].transcript;
-      if(text){
-        input.value = input.value ? (input.value + ' ' + text) : text;
-        toast('Распознано!', '✓');
-      }
-    };
-
-    recognition.onerror = (e) => {
-      console.log('Speech error', e);
-      toast('Не удалось распознать голос', '⚠️');
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    recognition.onend = () => {
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    currentSpeechRec = recognition;
-    recognition.start();
-  }catch(e){
-    toast('Ошибка микрофона: ' + e.message, '⚠️');
-  }
-}
-
-// ---------- Photoshop & Media Tools ----------
-let currentUserPhotoBase64 = null;
-
-function switchImgTool(tool){
-  ['photoshop', 'generate', 'search'].forEach(t => {
-    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
-    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
-    if(panel) panel.classList.toggle('hidden', t !== tool);
-    if(tab){
-      if(t === tool){
-        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
-      } else {
-        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
-      }
-    }
-  });
-}
-
-function handleUserPhotoSelected(event){
-  const file = event.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    currentUserPhotoBase64 = e.target.result;
-    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
-    document.getElementById('photoshopFileName').textContent = file.name;
-    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
-    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
-    toast('Фото загружено!', '✓');
-  };
-  reader.readAsDataURL(file);
-}
-
-async function applyAiPhotoshop(){
-  if(!currentUserPhotoBase64){
-    return toast('Сначала загрузите фотографию!', '⚠️');
-  }
-  const prompt = document.getElementById('photoshopPrompt').value.trim();
-  if(!prompt){
-    return toast('Напишите, что изменить на фото', '⚠️');
-  }
-  const apiKey = getKey();
-  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
-
-  const btn = document.getElementById('aiPhotoshopBtn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Обработка...';
-  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
-
-  try {
-    const fullPrompt = 'Professional web design photo editing: ' + prompt;
-    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
-    
-    const resp = await fetch('https://polza.ai/api/v1/media', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        input: {
-          prompt: fullPrompt,
-          images: [{ type: 'base64', data: base64Data }]
-        }
-      })
-    });
-
-    if(!resp.ok){
-      const err = await resp.text();
-      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
-    }
-
-    const data = await resp.json();
-    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
-    const mediaId = data.id || data.request_id || data.requestId;
-
-    if(!resultUrl && mediaId){
-      for(let i = 0; i < 20; i++){
-        await new Promise(r => setTimeout(r, 2000));
-        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        if(st.ok){
-          const sj = await st.json();
-          if(sj.status === 'completed' || sj.status === 'succeeded'){
-            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
-            break;
-          }
-        }
-      }
-    }
-
-    if(resultUrl){
-      insertImage(resultUrl);
-      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
-    } else {
-      toast('Готово! Изображение обработано', '✓');
-    }
-  } catch(e) {
-    toast('Ошибка фотошопа: ' + e.message, '⚠️');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🪄 Изменить';
-  }
-}
-
-// ---------- Owner Unlimited Authentication ----------
-function checkOwnerAuth(){
-  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
-  const badge = document.getElementById('ownerStatusBadge');
-  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
-  if(badge) badge.classList.toggle('hidden', !isOwner);
-  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
-}
-
-function verifyOwnerPassword(pass){
-  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
-    localStorage.setItem('neurasite_owner', 'true');
-    checkOwnerAuth();
-    toast('Режим владельца активирован: Безлимит! 👑', '👑');
-    document.getElementById('ownerPinModal')?.classList.add('hidden');
-    return true;
-  }
-  return false;
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  checkOwnerAuth();
-});
-
-</script>
+<script src="https://cdn.tailwindcss.com"></script>
 <script>
 tailwind.config = {
   theme: {
@@ -208,197 +17,6 @@ tailwind.config = {
     }
   }
 }
-
-// ---------- Voice Input (Голосовой ввод) ----------
-let currentSpeechRec = null;
-function startVoiceInput(inputId, btnId){
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRecognition){
-    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
-  }
-
-  const btn = document.getElementById(btnId);
-  const input = document.getElementById(inputId);
-  if(!btn || !input) return;
-
-  if(btn.dataset.recording === 'true'){
-    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
-    btn.dataset.recording = 'false';
-    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    toast('Запись остановлена', '⏹');
-    return;
-  }
-
-  try{
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ru-RU';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      btn.dataset.recording = 'true';
-      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
-      toast('Слушаю вас... Говорите', '🎙️');
-    };
-
-    recognition.onresult = (event) => {
-      const text = event.results[0][0].transcript;
-      if(text){
-        input.value = input.value ? (input.value + ' ' + text) : text;
-        toast('Распознано!', '✓');
-      }
-    };
-
-    recognition.onerror = (e) => {
-      console.log('Speech error', e);
-      toast('Не удалось распознать голос', '⚠️');
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    recognition.onend = () => {
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    currentSpeechRec = recognition;
-    recognition.start();
-  }catch(e){
-    toast('Ошибка микрофона: ' + e.message, '⚠️');
-  }
-}
-
-// ---------- Photoshop & Media Tools ----------
-let currentUserPhotoBase64 = null;
-
-function switchImgTool(tool){
-  ['photoshop', 'generate', 'search'].forEach(t => {
-    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
-    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
-    if(panel) panel.classList.toggle('hidden', t !== tool);
-    if(tab){
-      if(t === tool){
-        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
-      } else {
-        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
-      }
-    }
-  });
-}
-
-function handleUserPhotoSelected(event){
-  const file = event.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    currentUserPhotoBase64 = e.target.result;
-    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
-    document.getElementById('photoshopFileName').textContent = file.name;
-    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
-    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
-    toast('Фото загружено!', '✓');
-  };
-  reader.readAsDataURL(file);
-}
-
-async function applyAiPhotoshop(){
-  if(!currentUserPhotoBase64){
-    return toast('Сначала загрузите фотографию!', '⚠️');
-  }
-  const prompt = document.getElementById('photoshopPrompt').value.trim();
-  if(!prompt){
-    return toast('Напишите, что изменить на фото', '⚠️');
-  }
-  const apiKey = getKey();
-  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
-
-  const btn = document.getElementById('aiPhotoshopBtn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Обработка...';
-  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
-
-  try {
-    const fullPrompt = 'Professional web design photo editing: ' + prompt;
-    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
-    
-    const resp = await fetch('https://polza.ai/api/v1/media', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        input: {
-          prompt: fullPrompt,
-          images: [{ type: 'base64', data: base64Data }]
-        }
-      })
-    });
-
-    if(!resp.ok){
-      const err = await resp.text();
-      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
-    }
-
-    const data = await resp.json();
-    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
-    const mediaId = data.id || data.request_id || data.requestId;
-
-    if(!resultUrl && mediaId){
-      for(let i = 0; i < 20; i++){
-        await new Promise(r => setTimeout(r, 2000));
-        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        if(st.ok){
-          const sj = await st.json();
-          if(sj.status === 'completed' || sj.status === 'succeeded'){
-            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
-            break;
-          }
-        }
-      }
-    }
-
-    if(resultUrl){
-      insertImage(resultUrl);
-      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
-    } else {
-      toast('Готово! Изображение обработано', '✓');
-    }
-  } catch(e) {
-    toast('Ошибка фотошопа: ' + e.message, '⚠️');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🪄 Изменить';
-  }
-}
-
-// ---------- Owner Unlimited Authentication ----------
-function checkOwnerAuth(){
-  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
-  const badge = document.getElementById('ownerStatusBadge');
-  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
-  if(badge) badge.classList.toggle('hidden', !isOwner);
-  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
-}
-
-function verifyOwnerPassword(pass){
-  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
-    localStorage.setItem('neurasite_owner', 'true');
-    checkOwnerAuth();
-    toast('Режим владельца активирован: Безлимит! 👑', '👑');
-    document.getElementById('ownerPinModal')?.classList.add('hidden');
-    return true;
-  }
-  return false;
-}
-
-window.addEventListener('DOMContentLoaded', () => {
-  checkOwnerAuth();
-});
-
 </script>
 <style>
 :root{--bg:#070A12;--bg2:#0F1320;--card:#151A2D;--line:#1E2540;--accent:#6C5CFF;--accent2:#8B7DFF;--accent3:#4F46E5;--green:#00D492;--pink:#FF4D8D;--cyan:#00D9FF}
@@ -457,6 +75,8 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     </div>
     
     <div class="flex items-center gap-2">
+      <span id="keyPill" class="px-2.5 py-1 rounded-full text-[11px] font-bold border bg-white/5 border-white/10">ключ…</span>
+      <span id="balancePill" class="hidden px-2.5 py-1 rounded-full text-[11px] font-mono glass">Баланс —</span>
       <button type="button" onclick="loadExample()" class="btn-ghost px-3 py-2 rounded-xl text-[12px] font-medium hidden sm:flex items-center gap-1">
         <span>⚡</span> <span>Пример</span>
       </button>
@@ -465,11 +85,11 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       </button>
     </div>
   </div>
-  <input id="polzaKey" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
-  <input id="polzaKeyMobile" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
-  <input id="keyModalInput" type="hidden" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4">
-  <select id="modelSelect" class="hidden"><option value="anthropic/claude-sonnet-4-5" selected></option></select>
-  <select id="modelSelectMobile" class="hidden"><option value="anthropic/claude-sonnet-4-5" selected></option></select>
+  <input id="polzaKey" type="hidden">
+  <input id="polzaKeyMobile" type="hidden">
+  <input id="keyModalInputMirror" type="hidden">
+  <select id="modelSelect" class="hidden"><option value="anthropic/claude-sonnet-4.5" selected></option></select>
+  <select id="modelSelectMobile" class="hidden"><option value="anthropic/claude-sonnet-4.5" selected></option></select>
 </header>
 
 <!-- Main Layout -->
@@ -578,6 +198,25 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <input id="contactInst" class="input-field px-3 py-2.5 rounded-xl text-[13px]" placeholder="Instagram @">
         <input id="ctaText" class="input-field col-span-2 px-3 py-2.5 rounded-xl text-[13px]" placeholder="Текст кнопки: Получить демо">
       </div>
+      <div class="pt-1">
+        <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Откуда фото на сайте</label>
+        <div class="grid grid-cols-3 gap-1.5 mt-1.5 text-[11px]">
+          <label class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 text-center">
+            <input type="radio" name="photoMode" value="search" checked class="accent-[#6C5CFF]"> <span>🔎 Реальные фото</span><span class="text-[9px] text-white/40">поиск, бесплатно</span>
+          </label>
+          <label class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 text-center">
+            <input type="radio" name="photoMode" value="ai" class="accent-[#6C5CFF]"> <span>✨ ИИ-фото</span><span class="text-[9px] text-white/40">~3-5 ₽ за фото</span>
+          </label>
+          <label class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 text-center">
+            <input type="radio" name="photoMode" value="none" class="accent-[#6C5CFF]"> <span>🎨 Без фото</span><span class="text-[9px] text-white/40">градиенты и CSS</span>
+          </label>
+        </div>
+      </div>
+      <div id="pagesBlock" class="pt-1">
+        <label class="text-[11px] font-mono text-white/50 uppercase tracking-wider">Страницы сайта (для многостраничника)</label>
+        <input id="pagesInput" class="input-field w-full mt-1.5 px-3 py-2 rounded-xl text-[12px]" value="Главная, Каталог, О компании, Отзывы, Контакты" placeholder="Главная, Каталог, Контакты">
+        <div class="text-[10px] text-white/40 mt-1">Каждая страница — отдельный HTML-файл, навигация между ними рабочая.</div>
+      </div>
       <div class="flex flex-wrap gap-1.5 pt-1">
         <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/5 text-[11px] cursor-pointer hover:bg-white/10"><input type="checkbox" value="animations" checked class="feature-check accent-[#6C5CFF]"> Анимации</label>
         <label class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/5 text-[11px] cursor-pointer hover:bg-white/10"><input type="checkbox" value="parallax" checked class="feature-check"> Параллакс</label>
@@ -644,7 +283,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
             <input id="imagePrompt" class="input-field w-full px-3 py-2 pr-8 rounded-xl text-[12px]" placeholder="Например: современный офис с неоновой подсветкой">
             <button type="button" onclick="startVoiceInput('imagePrompt', 'voiceBtnImage')" id="voiceBtnImage" class="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 hover:text-white text-[13px]">🎙️</button>
           </div>
-          <button type="button" onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Создать</button>
+          <button type="button" onclick="generateImage('imagePrompt','imageResults1')" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Создать</button>
         </div>
       </div>
 
@@ -652,25 +291,25 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <div id="toolPanelSearch" class="space-y-2 hidden">
         <div class="flex gap-2">
           <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[12px]" placeholder="Поиск фото: modern house, coffee...">
-          <button type="button" onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍 Найти</button>
+          <button type="button" onclick="searchImages('imageQuery','imageResults1')" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍 Найти</button>
         </div>
       </div>
 
-      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[160px] overflow-y-auto hidden"></div>
+      <div id="imageResults1" class="grid grid-cols-3 gap-2 max-h-[160px] overflow-y-auto hidden"></div>
     </div>
 
     <!-- Image Tools -->
     <div class="glass rounded-[20px] p-4 space-y-3">
       <h3 class="font-space font-semibold text-[13px] flex items-center gap-2"><span class="w-5 h-5 rounded-md bg-[#FF4D8D]/20 flex items-center justify-center">◐</span> Картинки & Генерация</h3>
       <div class="flex gap-2">
-        <input id="imageQuery" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Найти картинку: business team">
-        <button onclick="searchImages()" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍</button>
+        <input id="imageQuery2" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Найти картинку: business team">
+        <button onclick="searchImages('imageQuery2','imageResults2')" class="btn-ghost px-3 py-2 rounded-xl text-[12px]">🔍</button>
       </div>
       <div class="flex gap-2">
-        <input id="imagePrompt" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Сгенерить: futuristic office, neon">
-        <button onclick="generateImage()" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
+        <input id="imagePrompt2" class="input-field flex-1 px-3 py-2 rounded-xl text-[13px]" placeholder="Сгенерить: futuristic office, neon">
+        <button onclick="generateImage('imagePrompt2','imageResults2')" class="btn-primary px-3 py-2 rounded-xl text-[12px] text-white">✦ Gen</button>
       </div>
-      <div id="imageResults" class="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto hidden"></div>
+      <div id="imageResults2" class="grid grid-cols-3 gap-2 max-h-[180px] overflow-y-auto hidden"></div>
     </div>
   </div>
 
@@ -695,6 +334,8 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <button onclick="toggleCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">{"</>"} Код</button>
         <button onclick="copyCode()" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">📋 Копировать</button>
         <button onclick="downloadSite()" class="btn-primary px-4 py-1.5 rounded-lg text-[12px] font-bold text-white">⬇ Скачать</button>
+        <button onclick="downloadZip()" id="zipBtn" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px] hidden">🗂 ZIP всех страниц</button>
+        <button onclick="runSelfTest()" id="testBtn" class="btn-ghost px-3 py-1.5 rounded-lg text-[12px]">🧪 Проверить сайт</button>
       </div>
     </div>
 
@@ -751,7 +392,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
     </div>
 
     <!-- Quick Stats -->
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
       <div class="glass rounded-xl p-3 flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-[#6C5CFF]/20 flex items-center justify-center text-[14px]">⚡</div>
         <div><div class="text-[12px] font-medium" id="statTime">—</div><div class="text-[11px] text-white/40">Время генерации</div></div>
@@ -763,6 +404,10 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
       <div class="glass rounded-xl p-3 flex items-center gap-3">
         <div class="w-8 h-8 rounded-lg bg-[#FF4D8D]/20 flex items-center justify-center text-[14px]">🧠</div>
         <div><div class="text-[12px] font-medium" id="statModel">—</div><div class="text-[11px] text-white/40">Модель Polza</div></div>
+      </div>
+      <div class="glass rounded-xl p-3 flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-[#00D492]/20 flex items-center justify-center text-[14px]">💰</div>
+        <div><div class="text-[12px] font-medium" id="statCost">—</div><div class="text-[11px] text-white/40">Стоимость</div></div>
       </div>
     </div>
   </div>
@@ -895,8 +540,25 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         </div>
 
         <div class="flex gap-3">
-          <input id="keyModalInput" type="text" value="pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4" placeholder="Вставь сюда sk-polza-..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
+          <input id="keyModalInput" type="text" placeholder="Вставь сюда pza_..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
           <button onclick="saveKeyFromModal()" class="btn-primary px-6 py-3 rounded-xl text-[14px] font-bold text-white">💾 Сохранить ключ</button>
+        </div>
+
+        <div class="mt-4 pt-4 border-t border-white/10">
+          <div class="text-[13px] font-bold mb-1">📷 Источники фотографий (по желанию)</div>
+          <div class="text-[11px] text-white/50 leading-relaxed mb-2">
+            Без ключей фото ищутся в свободных базах (Openverse, Wikimedia) — бесплатно, но подбор грубее.
+            Свой бесплатный ключ Unsplash / Pexels / Pixabay даёт заметно более точные фото под нишу.
+          </div>
+          <div class="grid md:grid-cols-3 gap-2">
+            <input id="unsplashKeyInput" class="input-field px-3 py-2 rounded-xl text-[12px] font-mono" placeholder="Unsplash Access Key">
+            <input id="pexelsKeyInput" class="input-field px-3 py-2 rounded-xl text-[12px] font-mono" placeholder="Pexels API Key">
+            <input id="pixabayKeyInput" class="input-field px-3 py-2 rounded-xl text-[12px] font-mono" placeholder="Pixabay API Key">
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button onclick="savePhotoKeys()" class="btn-ghost px-4 py-2 rounded-xl text-[12px]">Сохранить фото-ключи</button>
+            <span id="photoKeysState" class="text-[11px] text-white/40 self-center"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -941,7 +603,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <div class="grid md:grid-cols-3 gap-3 text-[12px]">
           <div class="rounded-xl bg-[#6C5CFF]/10 border border-[#6C5CFF]/20 p-3">
             <div class="font-bold mb-1">🥇 Основной генератор</div>
-            <div class="font-mono text-[#8B7DFF]">anthropic/claude-sonnet-4-5</div>
+            <div class="font-mono text-[#8B7DFF]">anthropic/claude-sonnet-4.5</div>
             <div class="text-white/50 mt-1">Лучший для фронтенда, понимает дизайн, пишет чистый Tailwind + GSAP, делает вау-анимации</div>
           </div>
           <div class="rounded-xl bg-[#FF4D8D]/10 border border-[#FF4D8D]/20 p-3">
@@ -951,7 +613,7 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           </div>
           <div class="rounded-xl bg-[#00D9FF]/10 border border-[#00D9FF]/20 p-3">
             <div class="font-bold mb-1">💬 Доработки в чате</div>
-            <div class="font-mono text-[#00D9FF]">anthropic/claude-haiku-4-5</div>
+            <div class="font-mono text-[#00D9FF]">anthropic/claude-haiku-4.5</div>
             <div class="text-white/50 mt-1">Быстрый, дешевый, идеален для правок «сделай темнее», «добавь секцию»</div>
           </div>
         </div>
@@ -963,12 +625,85 @@ client = OpenAI(
   api_key="POLZA_KEY"
 )
 resp = client.chat.completions.create(
-  model="anthropic/claude-sonnet-4-5",
+  model="anthropic/claude-sonnet-4.5",
   messages=[{"role":"user","content":"Создай лендинг..."}]
 )</code></pre>
         </div>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Pricing Modal -->
+<div id="pricingModal" class="hidden fixed inset-0 z-[110] bg-black/80 backdrop-blur-xl p-4 md:p-8 overflow-y-auto">
+  <div class="max-w-[980px] mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="font-space font-bold text-[24px] md:text-[30px]">💳 Тарифы</h2>
+      <button onclick="document.getElementById('pricingModal').classList.add('hidden')" class="w-9 h-9 rounded-xl glass flex items-center justify-center">✕</button>
+    </div>
+    <div class="grid md:grid-cols-3 gap-4">
+      <div class="glass rounded-[20px] p-5 border border-white/10">
+        <div class="text-[12px] font-mono text-white/50 uppercase">Старт</div>
+        <div class="text-[28px] font-bold mt-1">0 ₽</div>
+        <div class="text-[12px] text-white/50 mt-1">Свой ключ Polza AI</div>
+        <ul class="text-[12px] text-white/70 mt-3 space-y-1.5">
+          <li>✓ Все модели Polza на вашем ключе</li>
+          <li>✓ Одностраничники и многостраничники</li>
+          <li>✓ Реальный поиск фото</li>
+          <li>✓ Скачивание HTML и ZIP</li>
+        </ul>
+      </div>
+      <div class="glass rounded-[20px] p-5 border border-[#6C5CFF]/40 relative">
+        <div class="absolute -top-3 left-5 px-3 py-1 rounded-full bg-[#6C5CFF] text-[10px] font-bold text-white">ХИТ</div>
+        <div class="text-[12px] font-mono text-white/50 uppercase">Про</div>
+        <div class="text-[28px] font-bold mt-1">под ключ</div>
+        <div class="text-[12px] text-white/50 mt-1">Сайты для клиентов</div>
+        <ul class="text-[12px] text-white/70 mt-3 space-y-1.5">
+          <li>✓ Генерация без лимитов владельца</li>
+          <li>✓ Многостраничные сайты + ZIP</li>
+          <li>✓ ИИ-фото прямо в сайт</li>
+          <li>✓ Публикация на домене (по запросу)</li>
+        </ul>
+      </div>
+      <div class="glass rounded-[20px] p-5 border border-white/10">
+        <div class="text-[12px] font-mono text-white/50 uppercase">Студия</div>
+        <div class="text-[28px] font-bold mt-1">индивидуально</div>
+        <div class="text-[12px] text-white/50 mt-1">Поток сайтов и брендинг</div>
+        <ul class="text-[12px] text-white/70 mt-3 space-y-1.5">
+          <li>✓ Оптовые пакеты генераций</li>
+          <li>✓ Свои дизайн-системы и шаблоны</li>
+          <li>✓ Поддержка и доработки</li>
+        </ul>
+      </div>
+    </div>
+    <div class="glass rounded-[20px] p-5 mt-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="text-[12px] text-white/60">Владелец? Введите PIN, чтобы снять лимиты и скрыть тарифы.</div>
+      <button onclick="document.getElementById('pricingModal').classList.add('hidden'); document.getElementById('ownerPinModal').classList.remove('hidden')" class="btn-ghost px-4 py-2 rounded-xl text-[12px]">👑 Вход владельца</button>
+    </div>
+  </div>
+</div>
+
+<!-- Owner PIN Modal -->
+<div id="ownerPinModal" class="hidden fixed inset-0 z-[120] bg-black/80 backdrop-blur-xl p-4 flex items-center justify-center">
+  <div class="glass-strong rounded-[20px] p-6 w-full max-w-[360px]">
+    <h3 class="font-space font-bold text-[16px] mb-1">👑 Режим владельца</h3>
+    <p class="text-[12px] text-white/50 mb-3">PIN-код скрывает тарифы и включает безлимит.</p>
+    <input id="ownerPinInput" type="password" class="input-field w-full px-3 py-2.5 rounded-xl text-[13px]" placeholder="PIN" onkeydown="if(event.key==='Enter') tryOwnerPin()">
+    <div class="flex gap-2 mt-3">
+      <button onclick="tryOwnerPin()" class="flex-1 btn-primary py-2.5 rounded-xl text-[13px] font-bold text-white">Войти</button>
+      <button onclick="document.getElementById('ownerPinModal').classList.add('hidden')" class="btn-ghost px-4 py-2.5 rounded-xl text-[12px]">Отмена</button>
+    </div>
+  </div>
+</div>
+
+<!-- Test Report Modal -->
+<div id="testModal" class="hidden fixed inset-0 z-[130] bg-black/80 backdrop-blur-xl p-4 md:p-8 overflow-y-auto">
+  <div class="max-w-[760px] mx-auto glass-strong rounded-[20px] p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-space font-bold text-[18px]">🧪 Проверка сайта</h2>
+      <button onclick="document.getElementById('testModal').classList.add('hidden')" class="w-9 h-9 rounded-xl glass flex items-center justify-center">✕</button>
+    </div>
+    <div id="testReport" class="text-[12px] space-y-1.5 font-mono"></div>
   </div>
 </div>
 
@@ -980,850 +715,1744 @@ resp = client.chat.completions.create(
 </div>
 
 <script>
-// ---------- State ----------
-let currentHtml = '';
-let history = JSON.parse(localStorage.getItem('neuralsite_history') || '[]');
-let isGenerating = false;
+window.__NS_RUNTIME__ = "/* Рантайм, который вшивается в каждый сгенерированный сайт.\n   Задача: сайт должен работать даже там, где модель ошиблась или что-то не подгрузилось. */\n(function () {\n  var pool = window.__nsPhotoPool || [];\n  var STATS = window.__nsStats = { revealed: 0, stubs: 0, menu: false, forms: 0, anchors: 0, unstuck: 0 };\n  document.documentElement.classList.add('ns-js-ready');\n\n  /* --- фотографии: подмена битых ссылок на проверенные из пула --- */\n  window.nsImgError = function (img, idx) {\n    try {\n      var next = pool[(parseInt(idx || '0', 10) + 1) % Math.max(pool.length, 1)] || pool[0];\n      if (next && img.dataset.nsTried !== '2') { img.dataset.nsTried = '2'; img.src = next; return; }\n      var wrap = document.createElement('div');\n      wrap.className = 'ns-img-fallback';\n      wrap.textContent = img.getAttribute('alt') || 'фото';\n      if (img.parentNode) img.parentNode.replaceChild(wrap, img);\n    } catch (e) { }\n  };\n  Array.prototype.forEach.call(document.images, function (img, i) {\n    if (!img.getAttribute('onerror')) img.setAttribute('onerror', 'nsImgError(this,' + i + ')');\n    if (!img.getAttribute('loading')) img.setAttribute('loading', 'lazy');\n    if (!img.getAttribute('decoding')) img.setAttribute('decoding', 'async');\n  });\n\n  /* --- появление секций при скролле --- */\n  function revealInit() {\n    var nodes = Array.prototype.slice.call(document.querySelectorAll('.ns-reveal:not(.ns-in)'));\n    if (!nodes.length) return;\n    if (!('IntersectionObserver' in window)) {\n      nodes.forEach(function (n) { n.classList.add('ns-in'); });\n      STATS.revealed += nodes.length;\n      return;\n    }\n    var io = new IntersectionObserver(function (entries) {\n      entries.forEach(function (e) {\n        if (e.isIntersecting) { e.target.classList.add('ns-in'); STATS.revealed++; io.unobserve(e.target); }\n      });\n    }, { rootMargin: '0px 0px -6% 0px', threshold: 0.06 });\n    nodes.forEach(function (n, i) { n.style.transitionDelay = Math.min(i, 6) * 60 + 'ms'; io.observe(n); });\n  }\n\n  /* Если модель не сделала анимаций — включаем аккуратное появление секций сами. */\n  function autoReveal() {\n    var hasAnim = window.gsap || window.AOS || window.WOW ||\n      document.querySelector('[data-aos],[data-wow],[data-scroll],.animate-on-scroll,.reveal,.ns-reveal');\n    if (hasAnim) return;\n    var sections = Array.prototype.slice.call(document.querySelectorAll('body > section, main > section, .section'));\n    sections.forEach(function (s, i) { if (i > 0 && !s.classList.contains('ns-reveal')) s.classList.add('ns-reveal'); });\n    var cards = Array.prototype.slice.call(document.querySelectorAll('.card, .feature, [class*=\"card\"]')).slice(0, 24);\n    cards.forEach(function (c) { if (!c.classList.contains('ns-reveal')) c.classList.add('ns-reveal'); });\n  }\n\n  /* --- страховка: контент обязан быть видимым, даже если анимация не сработала --- */\n  function safetyNet() {\n    var i, el, stuck = 0;\n    function transparent(node) {\n      var st = getComputedStyle(node);\n      return st.display !== 'none' && st.visibility !== 'hidden' && parseFloat(st.opacity) === 0;\n    }\n    var cands = document.querySelectorAll(\n      '.ns-reveal:not(.ns-in), .animate-on-scroll:not(.visible):not(.is-visible):not(.animate-in),' +\n      '.reveal:not(.visible):not(.is-visible), .fade-in:not(.visible):not(.is-visible), [data-animate]:not(.visible)'\n    );\n    for (i = 0; i < cands.length; i++) {\n      el = cands[i];\n      if (!transparent(el)) continue;\n      el.style.transition = 'opacity .6s ease, transform .6s ease';\n      el.style.opacity = '1';\n      el.style.transform = 'none';\n      el.classList.add('ns-in');\n      stuck++;\n    }\n    var host = document.body.querySelectorAll('section,article,div,li,h2,h3,p');\n    for (i = 0; i < host.length; i++) {\n      el = host[i];\n      if (el.dataset.nsUnstuck) continue;\n      var cls = String(el.className || '');\n      if (/modal|menu|overlay|popup|drawer|tooltip|backdrop|lightbox|cursor|loader|spinner|toast/i.test(cls)) continue;\n      var st = getComputedStyle(el);\n      if (st.display === 'none' || st.visibility === 'hidden' || st.position === 'fixed' || st.position === 'absolute') continue;\n      if (parseFloat(st.opacity) === 0 && el.offsetHeight > 8 && el.offsetWidth > 8) {\n        el.dataset.nsUnstuck = '1';\n        el.style.transition = 'opacity .5s ease';\n        el.style.opacity = '1';\n        stuck++;\n      }\n    }\n    STATS.unstuck += stuck;\n  }\n\n  /* --- мобильное меню --- */\n  function menuInit() {\n    var toggle = document.querySelector('[data-menu-toggle], #burger, .burger, .hamburger, #hamburger, [aria-label*=\"меню\"], [aria-label*=\"Menu\"]');\n    if (!toggle) {\n      toggle = Array.prototype.slice.call(document.querySelectorAll('header button, header a')).filter(function (b) {\n        return /☰|≡|меню|menu/i.test((b.textContent || '') + ' ' + (b.getAttribute('aria-label') || ''));\n      })[0];\n    }\n    if (!toggle) return;\n    var menu = document.querySelector('#mobileMenu, #mobile-menu, #navMenu, .mobile-menu, .nav-menu, .nav-mobile, nav[data-mobile]');\n    var owned = false;\n    if (!menu) {\n      menu = document.querySelector('header nav');\n      if (!menu) return;\n      menu = menu.cloneNode(true);\n      menu.className = 'ns-mobile-menu';\n      menu.id = 'ns-mobile-menu';\n      menu.style.cssText = 'display:none;flex-direction:column;gap:14px;padding:18px 20px;background:rgba(12,14,24,.97);position:absolute;left:0;right:0;top:100%;z-index:80';\n      var host = toggle.closest('header') || document.body;\n      host.style.position = host.style.position || 'relative';\n      host.appendChild(menu);\n      owned = true;\n    }\n    var opened = false;\n    var originalDisplay = menu.style.display;\n    function setOpen(v) {\n      opened = v;\n      menu.style.display = v ? 'flex' : (owned ? 'none' : originalDisplay);\n      toggle.setAttribute('aria-expanded', v ? 'true' : 'false');\n    }\n    setOpen(false);\n    toggle.addEventListener('click', function (e) { e.preventDefault(); setOpen(!opened); });\n    menu.addEventListener('click', function (e) { if (e.target.closest && e.target.closest('a')) setOpen(false); });\n    document.addEventListener('click', function (e) { if (opened && !menu.contains(e.target) && !toggle.contains(e.target)) setOpen(false); });\n    STATS.menu = true;\n  }\n\n  /* --- мягкий скролл к якорям --- */\n  function anchorInit() {\n    document.addEventListener('click', function (e) {\n      var a = e.target.closest && e.target.closest('a[href^=\"#\"]');\n      if (!a) return;\n      var id = (a.getAttribute('href') || '').slice(1);\n      if (!id) return;\n      var target = document.getElementById(id);\n      if (!target) return;\n      e.preventDefault();\n      var header = document.querySelector('header');\n      var offset = header ? header.getBoundingClientRect().height + 8 : 0;\n      window.scrollTo({ top: target.getBoundingClientRect().top + window.pageYOffset - offset, behavior: 'smooth' });\n      STATS.anchors++;\n    }, true);\n  }\n\n  /* --- активный пункт меню --- */\n  function activeNav() {\n    var links = Array.prototype.slice.call(document.querySelectorAll('header a[href^=\"#\"]'));\n    if (!links.length || !('IntersectionObserver' in window)) return;\n    var map = {};\n    links.forEach(function (l) {\n      var t = document.getElementById((l.getAttribute('href') || '').slice(1));\n      if (t) map[t.id] = l;\n    });\n    if (!Object.keys(map).length) return;\n    var io = new IntersectionObserver(function (entries) {\n      entries.forEach(function (e) {\n        if (!e.isIntersecting) return;\n        links.forEach(function (l) { l.classList.remove('ns-active'); });\n        if (map[e.target.id]) map[e.target.id].classList.add('ns-active');\n      });\n    }, { threshold: 0.4 });\n    Object.keys(map).forEach(function (id) { io.observe(document.getElementById(id)); });\n  }\n\n  /* --- аккордеоны / FAQ --- */\n  function accordionInit() {\n    Array.prototype.forEach.call(document.querySelectorAll('[data-accordion] > *, .faq-item, .accordion-item'), function (item) {\n      if (item.dataset.nsBound) return;\n      var head = item.querySelector('.faq-q, .accordion-head, .accordion-header, [data-accordion-head], h3, h4, button');\n      var body = item.querySelector('.faq-a, .accordion-body, [data-accordion-body], .answer, .accordion-content');\n      if (!head || !body) return;\n      item.dataset.nsBound = '1';\n      body.style.display = 'none';\n      head.style.cursor = 'pointer';\n      head.addEventListener('click', function () {\n        var open = body.style.display === 'none';\n        body.style.display = open ? 'block' : 'none';\n        item.classList.toggle('ns-open', open);\n      });\n    });\n  }\n\n  /* --- формы: валидация + окно благодарности --- */\n  function successModal(title, text) {\n    var m = document.createElement('div');\n    m.className = 'ns-modal';\n    m.innerHTML = '<div class=\"ns-modal-card\"><div style=\"font-size:34px\">✅</div>' +\n      '<h3 style=\"margin:10px 0 6px;font-size:20px\">' + title + '</h3>' +\n      '<p style=\"margin:0;color:#555;font-size:14px\">' + text + '</p>' +\n      '<button style=\"margin-top:18px;padding:12px 26px;border:0;border-radius:12px;background:#111;color:#fff;cursor:pointer;font-weight:600\">Отлично</button></div>';\n    document.body.appendChild(m);\n    m.addEventListener('click', function (e) { if (e.target === m || e.target.tagName === 'BUTTON') m.remove(); });\n  }\n  function bindForms(root) {\n    Array.prototype.forEach.call((root || document).querySelectorAll('form'), function (f) {\n      if (f.dataset.nsBound) return;\n      f.dataset.nsBound = '1';\n      f.addEventListener('submit', function (e) {\n        e.preventDefault();\n        var bad = null;\n        Array.prototype.forEach.call(f.querySelectorAll('[required]'), function (inp) {\n          if (!bad && !String(inp.value || '').trim()) bad = inp;\n        });\n        if (bad) { bad.focus(); bad.style.outline = '2px solid #e5484d'; return; }\n        var tel = f.querySelector('[type=tel], [name*=tel], [name*=phone]');\n        if (tel && tel.value && String(tel.value).replace(/\\D/g, '').length < 10) {\n          tel.focus(); tel.style.outline = '2px solid #e5484d'; return;\n        }\n        var btn = f.querySelector('[type=submit], button');\n        if (btn) { btn.disabled = true; btn.dataset.nsText = btn.textContent; btn.textContent = 'Отправляем...'; }\n        setTimeout(function () {\n          if (btn) { btn.disabled = false; btn.textContent = btn.dataset.nsText || 'Отправить'; }\n          f.reset();\n          successModal('Заявка отправлена', 'Спасибо! Мы свяжемся с вами в течение рабочего дня.');\n        }, 900);\n        STATS.forms++;\n      });\n    });\n  }\n\n  /* --- параллакс, счётчики, кнопка наверх --- */\n  function extras() {\n    var layers = Array.prototype.slice.call(document.querySelectorAll('[data-parallax]')).slice(0, 6);\n    if (layers.length) {\n      var onScroll = function () {\n        var y = window.pageYOffset;\n        layers.forEach(function (el) {\n          var s = parseFloat(el.getAttribute('data-parallax')) || 0.15;\n          el.style.transform = 'translate3d(0,' + (-y * s).toFixed(1) + 'px,0)';\n        });\n      };\n      window.addEventListener('scroll', onScroll, { passive: true });\n      onScroll();\n    }\n    Array.prototype.forEach.call(document.querySelectorAll('[data-count]'), function (el) {\n      var to = parseFloat(el.getAttribute('data-count')) || 0, started = false;\n      function run() {\n        if (started) return;\n        started = true;\n        var t0 = performance.now();\n        (function tick() {\n          var p = Math.min(1, (performance.now() - t0) / 1200);\n          el.textContent = Math.round(to * (0.2 + 0.8 * p));\n          if (p < 1) requestAnimationFrame(tick); else el.textContent = to;\n        })();\n      }\n      if ('IntersectionObserver' in window) new IntersectionObserver(function (e) { if (e[0].isIntersecting) run(); }).observe(el);\n      else run();\n    });\n    var top = document.createElement('button');\n    top.className = 'ns-to-top';\n    top.innerHTML = '↑';\n    top.setAttribute('aria-label', 'Наверх');\n    top.addEventListener('click', function () { window.scrollTo({ top: 0, behavior: 'smooth' }); });\n    document.body.appendChild(top);\n    window.addEventListener('scroll', function () { top.classList.toggle('ns-show', window.pageYOffset > 700); }, { passive: true });\n  }\n\n  /* --- заглушки для несуществующих функций (мёртвых кнопок быть не должно) --- */\n  function stubs() {\n    var re = /on(?:click|submit|change)\\s*=\\s*\"\\s*([A-Za-z_$][\\w$]*)\\s*\\(/g;\n    var html = document.documentElement.innerHTML, m, names = {};\n    while ((m = re.exec(html))) names[m[1]] = true;\n    Object.keys(names).forEach(function (name) {\n      if (typeof window[name] === 'function') return;\n      window[name] = function () {\n        successModal('Скоро здесь будет раздел', 'Эта кнопка ведёт на страницу, которую ещё не сверстали. Напишите в чат генератора — сделаем.');\n      };\n      STATS.stubs++;\n    });\n  }\n\n  /* --- многостраничник: ссылки на *.html переключают файлы в предпросмотре --- */\n  function multiPreview() {\n    if (!window.__nsMulti) return;\n    document.addEventListener('click', function (e) {\n      var a = e.target.closest && e.target.closest('a[href$=\".html\"]');\n      if (!a) return;\n      var href = a.getAttribute('href');\n      if (!href || /^https?:/i.test(href)) return;\n      e.preventDefault();\n      try { parent.postMessage({ type: 'ns-goto', file: href.replace(/^\\.\\//, '') }, '*'); } catch (err) { }\n    }, true);\n  }\n\n  function boot() {\n    autoReveal();\n    revealInit();\n    menuInit();\n    anchorInit();\n    activeNav();\n    accordionInit();\n    bindForms(document);\n    extras();\n    stubs();\n    multiPreview();\n    setTimeout(safetyNet, 1200);\n    setTimeout(safetyNet, 3000);\n    window.addEventListener('beforeprint', safetyNet);\n    window.addEventListener('load', function () { safetyNet(); setTimeout(revealInit, 300); });\n    document.addEventListener('visibilitychange', function () { if (!document.hidden) safetyNet(); });\n    var header = document.querySelector('header');\n    if (header) {\n      window.addEventListener('scroll', function () { header.classList.toggle('ns-scrolled', window.pageYOffset > 12); }, { passive: true });\n    }\n    window.__nsReady = true;\n  }\n  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);\n  else boot();\n})();\n";
 
-// ---------- Models Data (fallback if API not available) ----------
-const MODELS = {
+/* ===== app.core.js ===== */
+/* ============================================================================
+   NeuraSite AI — ЯДРО
+   Конфиг, утилиты, работа с API Polza AI, поиск фотографий, ZIP.
+   Все API-форматы проверены живыми запросами 21.09.2026 (см. src/API-NOTES.md).
+   ========================================================================== */
+
+/* ----------------------------- КОНФИГ ----------------------------- */
+var CONFIG = {
+  API: 'https://polza.ai/api/v1',
+
+  // ВЛАДЕЛЕЦ: ключ по умолчанию. Виден всем, кто откроет сайт, — держите на нём мало денег.
+  // Ключ владельца. ОСТАВЛЯЙТЕ ПУСТЫМ на публичном сайте: любой посетитель увидит его
+  // в исходниках и потратит ваш баланс (так и произошло перед этой правкой).
+  // Безопасный путь — запустить generator_server.py: там ключ хранится в переменной окружения.
+  OWNER_KEY: '',
+
+  // PIN владельца (снимает тарифы, включает безлимит). Поменяйте на свой.
+  OWNER_PINS: ['2323gena', '2323гена', '2323'],
+
+  DEFAULT_MODEL: 'anthropic/claude-sonnet-4.5',
+  REFINE_MODEL: 'anthropic/claude-haiku-4.5',
+
+  MAX_OUT_TOKENS: 32000,       // сколько токенов просим за один заход
+  MAX_CONTINUATIONS: 3,        // сколько раз дописываем, если модель обрезала ответ
+  REQUEST_TIMEOUT_MS: 600000,  // 10 минут на запрос
+  IMAGE_POLL_TIMEOUT: 240000,  // 4 минуты на картинку
+
+  LS_KEY: 'ns_polza_key_v2',
+  LS_HISTORY: 'ns_history_v2',
+  LS_UNSPLASH: 'ns_unsplash_key_v2',
+  LS_OWNER: 'ns_owner_v2',
+  LS_PHOTOS: 'ns_photo_cache_v2',
+
+  PROXY: null,          // заполняется автоматически, если рядом запущен generator_server.py
+  PROXY_PREFIX: '/api/proxy'
+};
+
+/* Список моделей — резервный. Рабочий список тянется из /v1/models (он доступен без ключа). */
+var MODELS = {
   text: [
-    {id:"anthropic/claude-sonnet-4-5", name:"Claude Sonnet 4.5", best:"Фронтенд, дизайн, код - ЛУЧШИЙ", price:"~$3/1M", badge:"🔥 Рекомендуем", context:"200k"},
-    {id:"openai/gpt-5", name:"GPT-5", best:"Сложные SaaS, логика", price:"~$5/1M", badge:"💎 Премиум", context:"400k"},
-    {id:"google/gemini-2.5-pro", name:"Gemini 2.5 Pro", best:"Креатив, 1M контекст", price:"~$2.5/1M", badge:"🎨 Креатив", context:"1M"},
-    {id:"deepseek/deepseek-v3.2", name:"DeepSeek V3.2", best:"Быстро и дешево", price:"~$0.5/1M", badge:"⚡ Быстро", context:"128k"},
-    {id:"qwen/qwen3-235b-a22b:free", name:"Qwen3 235B", best:"Бесплатно, русский", price:"FREE", badge:"🆓 Бесплатно", context:"32k"},
-    {id:"anthropic/claude-haiku-4-5", name:"Claude Haiku 4.5", best:"Доработки в чате", price:"~$1/1M", badge:"💬 Чат", context:"200k"},
+    { id: 'anthropic/claude-sonnet-4.5', name: 'Claude Sonnet 4.5', note: 'Лучший для вёрстки и дизайна', rIn: 239.5, rOut: 1202.8, out: 128000, badge: '🔥 Рекомендуем' },
+    { id: 'anthropic/claude-sonnet-5', name: 'Claude Sonnet 5', note: 'Новое поколение, 1M контекст', rIn: 235.3, rOut: 1176.7, out: 128000, badge: '💎 Премиум' },
+    { id: 'anthropic/claude-haiku-4.5', name: 'Claude Haiku 4.5', note: 'Быстрый и недорогой, для правок', rIn: 50.4, rOut: 50.4, out: 128000, badge: '💬 Правки' },
+    { id: 'openai/gpt-5.6-sol-pro', name: 'GPT-5.6 Sol Pro', note: 'Сильная логика и структура', rIn: 117.7, rOut: 588.4, out: 128000, badge: '🧠 Сложные сайты' },
+    { id: 'google/gemini-2.5-pro', name: 'Gemini 2.5 Pro', note: '1M контекст, креатив', rIn: 86.2, rOut: 680.8, out: 65536, badge: '🎨 Креатив' },
+    { id: 'deepseek/deepseek-v3.2', name: 'DeepSeek V3.2', note: 'Очень дешёвый, быстрый', rIn: 24.6, rOut: 36.4, out: 147456, badge: '⚡ Экономия' },
+    { id: 'qwen/qwen3-coder', name: 'Qwen3 Coder', note: 'Заточен под код, 262k', rIn: 25.9, rOut: 111.8, out: 262144, badge: '💻 Код' },
+    { id: 'z-ai/glm-4.7', name: 'GLM 4.7', note: 'Хороший русский, недорого', rIn: 44.7, rOut: 204.7, out: 65536, badge: '🇷🇺 Русский' }
   ],
   image: [
-    {id:"bytedance/seedream-4.5", name:"Seedream 4.5", best:"Фотореализм, лучший", price:"~$0.05", badge:"🔥 Топ"},
-    {id:"openai/gpt-image-1.5", name:"GPT Image 1.5", best:"Иконки, точность", price:"~$0.08", badge:"🎯 Точность"},
-    {id:"black-forest-labs/flux-2-pro", name:"Flux 2 Pro", best:"Фоны, быстро", price:"~$0.03", badge:"⚡ Быстро"},
-    {id:"google/nano-banana-pro", name:"Nano Banana Pro", best:"Редактирование", price:"~$0.04", badge:"✏️ Редактор"},
-  ],
-  video: [
-    {id:"bytedance/seedance-2.5", name:"Seedance 2.5", best:"Видео для hero", price:"~$0.20/sec", badge:"🔥 Топ"},
-    {id:"kuaishou/kling-3.0", name:"Kling 3.0", best:"Кинематографичность", price:"~$0.15/sec", badge:"🎬 Кино"},
-    {id:"alibaba/wan-3.0", name:"Wan 3.0", best:"Моушн графика", price:"~$0.12/sec", badge:"✨ Моушн"},
-    {id:"google/veo-3.1", name:"Veo 3.1", best:"Макс качество", price:"~$0.30/sec", badge:"💎 Премиум"},
+    { id: 'google/gemini-2.5-flash-image', name: 'Nano Banana', note: 'Генерация и правка фото, дешевле всех', per: 2.9, badge: '⚡ Дешево' },
+    { id: 'bytedance/seedream-4.5', name: 'Seedream 4.5', note: 'Фотореализм 2K/4K', per: 5.0, badge: '🔥 Фотореализм' },
+    { id: 'black-forest-labs/flux.2-pro', name: 'Flux 2 Pro', note: 'Арт и фоны', per: 5.0, badge: '🎨 Арт' },
+    { id: 'openai/gpt-image-1.5', name: 'GPT Image 1.5', note: 'Точный текст на картинке', per: 6.0, badge: '🎯 Точность' }
   ]
 };
 
-function renderModels(){
-  const textEl = document.getElementById('textModelsList');
-  const imgEl = document.getElementById('imageModelsList');
-  const vidEl = document.getElementById('videoModelsList');
-  if(textEl) textEl.innerHTML = MODELS.text.map(m=>`
-    <div class="rounded-xl bg-white/[0.03] border border-white/5 p-3 hover:bg-white/[0.05] transition cursor-pointer" onclick="selectModel('${m.id}')">
-      <div class="flex items-center justify-between mb-1"><span class="font-bold text-[13px]">${m.name}</span><span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/10">${m.badge}</span></div>
-      <div class="text-[11px] text-white/50">${m.best}</div>
-      <div class="flex gap-2 mt-2 text-[10px] font-mono"><span class="px-1.5 py-0.5 rounded bg-black/30">${m.price}</span><span class="px-1.5 py-0.5 rounded bg-black/30">${m.context || ''}</span></div>
-      <div class="text-[10px] font-mono text-[#8B7DFF] mt-1 truncate">${m.id}</div>
-    </div>`).join('');
-  if(imgEl) imgEl.innerHTML = MODELS.image.map(m=>`
-    <div class="rounded-xl bg-white/[0.03] border border-white/5 p-3 hover:bg-white/[0.05] transition cursor-pointer" onclick="selectModel('${m.id}', 'image')">
-      <div class="flex items-center justify-between mb-1"><span class="font-bold text-[13px]">${m.name}</span><span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/10">${m.badge}</span></div>
-      <div class="text-[11px] text-white/50">${m.best}</div>
-      <div class="text-[10px] font-mono text-[#FF4D8D] mt-1 truncate">${m.id}</div>
-    </div>`).join('');
-  if(vidEl) vidEl.innerHTML = MODELS.video.map(m=>`
-    <div class="rounded-xl bg-white/[0.03] border border-white/5 p-3 hover:bg-white/[0.05] transition">
-      <div class="flex items-center justify-between mb-1"><span class="font-bold text-[13px]">${m.name}</span><span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/10">${m.badge}</span></div>
-      <div class="text-[11px] text-white/50">${m.best}</div>
-      <div class="text-[10px] font-mono text-[#00D9FF] mt-1 truncate">${m.id}</div>
-    </div>`).join('');
+/* ----------------------------- МЕЛОЧИ ----------------------------- */
+function $(id) { return document.getElementById(id); }
+function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+function esc(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-renderModels();
+function slugify(s) {
+  var map = { 'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i', 'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't', 'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'sch', 'ъ': '', 'ы': 'y', 'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya' };
+  var out = String(s || '').toLowerCase().split('').map(function (ch) { return map[ch] !== undefined ? map[ch] : ch; }).join('');
+  out = out.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  return out || 'page';
+}
+function lsGet(k, def) { try { var v = localStorage.getItem(k); return v === null ? def : v; } catch (e) { return def; } }
+function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { } }
+function lsJson(k, def) { try { return JSON.parse(localStorage.getItem(k) || def); } catch (e) { return def; } }
 
-function selectModel(id, type='text'){
-  if(type==='text'){
-    document.getElementById('modelSelect').value = id;
-    document.getElementById('modelSelectMobile').value = id;
-  }
-  toast(`Выбрана модель: ${id}`, '🧠');
-  document.getElementById('brainsModal').classList.add('hidden');
-}
-
-// ---------- Helpers ----------
-function getKey(){
-  const hardcoded = 'pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4';
-  return (document.getElementById('polzaKey')?.value || document.getElementById('polzaKeyMobile')?.value || document.getElementById('keyModalInput')?.value || '').trim() || localStorage.getItem('polza_key') || hardcoded;
-}
-function getModel(){
-  return document.getElementById('modelSelect')?.value || document.getElementById('modelSelectMobile')?.value || 'anthropic/claude-sonnet-4-5';
-}
-function toast(text, icon='✦'){
-  const t = document.getElementById('toast');
-  document.getElementById('toastText').textContent = text;
-  document.getElementById('toastIcon').textContent = icon;
+function toast(text, icon) {
+  var t = $('toast'); if (!t) { console.log(icon || '', text); return; }
+  $('toastText').textContent = text;
+  $('toastIcon').textContent = icon || '✦';
   t.classList.remove('hidden');
-  setTimeout(()=>t.classList.add('hidden'), 3000);
+  clearTimeout(window.__toastTimer);
+  window.__toastTimer = setTimeout(function () { t.classList.add('hidden'); }, 4000);
 }
-function toggleKey(){
-  const i = document.getElementById('polzaKey');
-  if(i) i.type = i.type==='password'?'text':'password';
-  const m = document.getElementById('polzaKeyMobile');
-  if(m) m.type = m.type==='password'?'text':'password';
-}
-function saveKey(){
-  const k = getKey();
-  if(!k){
-    toast('Вставь ключ Polza AI!', '🔑');
-    document.getElementById('keyModal').classList.remove('hidden');
-    return;
-  }
-  if(!k.startsWith('sk-')){
-    toast('Ключ должен начинаться с sk-...', '⚠️');
-    return;
-  }
-  localStorage.setItem('polza_key', k);
-  document.getElementById('polzaKey').value = k;
-  const mobile = document.getElementById('polzaKeyMobile');
-  if(mobile) mobile.value = k;
-  const modalInput = document.getElementById('keyModalInput');
-  if(modalInput) modalInput.value = k;
-  updateKeyUI();
-  toast('Ключ сохранен! Можно генерировать', '✅');
-}
-function saveKeyFromModal(){
-  const input = document.getElementById('keyModalInput');
-  const k = input.value.trim();
-  if(!k){ toast('Вставь ключ!', '🔑'); return; }
-  localStorage.setItem('polza_key', k);
-  document.getElementById('polzaKey').value = k;
-  const mobile = document.getElementById('polzaKeyMobile');
-  if(mobile) mobile.value = k;
-  updateKeyUI();
-  document.getElementById('keyModal').classList.add('hidden');
-  toast('Ключ сохранен! Теперь генерируй сайт', '✅');
-}
-function updateKeyUI(){
-  const k = getKey();
-  const hasKey = !!k;
-  const dot = document.getElementById('keyDot');
-  const wrapper = document.getElementById('keyWrapper');
-  const wrapperMobile = document.getElementById('keyWrapperMobile');
-  const banner = document.getElementById('keyBanner');
-  
-  if(dot){
-    dot.className = `w-2 h-2 rounded-full ${hasKey ? 'bg-[#00D492]' : 'bg-[#FF4D8D]'} animate-pulse`;
-  }
-  if(wrapper){
-    wrapper.className = `hidden md:flex items-center gap-2 glass px-3 py-2 rounded-xl border-2 transition-all ${hasKey ? 'border-[#00D492]/30 bg-[#00D492]/5' : 'border-[#FF4D8D]/30 bg-[#FF4D8D]/5 animate-pulse'}`;
-  }
-  if(wrapperMobile){
-    wrapperMobile.className = `flex-1 flex items-center gap-2 glass px-3 py-2 rounded-xl border-2 ${hasKey ? 'border-[#00D492]/30' : 'border-[#FF4D8D]/30'}`;
-  }
-  if(banner){
-    if(hasKey) banner.classList.add('hidden');
-    else banner.classList.remove('hidden');
-  }
-}
-function checkKeyOnStart(){
-  updateKeyUI();
-  const k = getKey();
-  if(!k){
-    setTimeout(()=>{
-      document.getElementById('keyModal').classList.remove('hidden');
-      toast('Сначала укажи Polza API ключ!', '🔑');
-    }, 1000);
-  }
-}
-function setPrompt(t){ document.getElementById('mainPrompt').value = t; }
-function setColors(c){ document.getElementById('colorInput').value = c; }
 
-function getFormData(){
-  const features = [...document.querySelectorAll('.feature-check:checked')].map(c=>c.value);
+function fmtRub(v) { return (Math.round(v * 100) / 100).toFixed(2) + ' ₽'; }
+function fmtSize(chars) { return (chars / 1024).toFixed(1) + ' KB'; }
+
+/* ----------------------------- КЛЮЧ ----------------------------- */
+function getKey() {
+  var fromInput = ($('polzaKey') && $('polzaKey').value || '').trim();
+  return fromInput || lsGet(CONFIG.LS_KEY, '') || CONFIG.OWNER_KEY || '';
+}
+function isOwnKey() {
+  var k = getKey();
+  return !!k && k !== CONFIG.OWNER_KEY;
+}
+function saveKeyValue(k) {
+  k = (k || '').trim();
+  if (!k) { toast('Вставь ключ Polza AI', '🔑'); return false; }
+  if (!/^(pza_|sk-)/.test(k)) { toast('Ключ Polza начинается с pza_ (старые — sk-)', '⚠️'); return false; }
+  lsSet(CONFIG.LS_KEY, k);
+  ['polzaKey', 'polzaKeyMobile', 'keyModalInput'].forEach(function (id) { if ($(id)) $(id).value = k; });
+  updateKeyUI();
+  toast('Ключ сохранён', '✅');
+  return true;
+}
+function updateKeyUI() {
+  var k = getKey();
+  var mine = isOwnKey();
+  var pill = $('keyPill'); if (!pill) return;
+  pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border ' +
+    (mine ? 'bg-[#00D492]/15 border-[#00D492]/40 text-[#00D492]' : 'bg-[#FFE17B]/15 border-[#FFE17B]/40 text-[#FFE17B]');
+  pill.textContent = mine ? '🔑 мой ключ' : '👑 ключ владельца';
+  pill.title = mine ? 'Генерация идёт на вашем ключе Polza AI' : 'Сейчас используется ключ владельца сайта. Можно вставить свой.';
+}
+
+/* ----------------------------- БЭКЕНД (необязательно) ----------------------------- */
+/* Если генератор открыт через generator_server.py, все запросы идут через него:
+   ключ остаётся на сервере и не виден посетителям. На GitHub Pages прокси нет — работаем напрямую. */
+async function detectProxy() {
+  try {
+    var res = await fetch('/health', { cache: 'no-store' });
+    if (!res.ok) return null;
+    var j = await res.json();
+    if (j && j.ok) { CONFIG.PROXY = ''; return j; }
+  } catch (e) { }
+  return null;
+}
+function proxyUrl(path) { return CONFIG.PROXY === null ? null : CONFIG.PROXY + path; }
+function proxyHeaders() {
+  var h = { 'Content-Type': 'application/json' };
+  if (isOwnKey()) h['X-Polza-Key'] = getKey();   // свой ключ уходит на сервер и используется вместо серверного
+  return h;
+}
+function isProxied() { return CONFIG.PROXY !== null; }
+
+/* ----------------------------- API POLZA ----------------------------- */
+
+function polzaHeaders() {
+  return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + getKey() };
+}
+function polzaError(status, body) {
+  var msg = '';
+  try { var j = JSON.parse(body); msg = (j.error && (j.error.message || j.error.code)) || j.message || ''; } catch (e) { msg = String(body || '').slice(0, 200); }
+  return new Error('Polza API ' + status + (msg ? ': ' + msg : ''));
+}
+
+/* Чат с потоковой отдачей. Возвращает {text, finishReason, usage, provider}. */
+async function polzaChat(opts) {
+  var model = opts.model, messages = opts.messages;
+  var maxTokens = opts.maxTokens || CONFIG.MAX_OUT_TOKENS;
+  var temperature = opts.temperature == null ? 0.7 : opts.temperature;
+  var onDelta = opts.onDelta, signal = opts.signal;
+  var stream = opts.stream !== false;
+
+  var body = { model: model, messages: messages, max_tokens: maxTokens, temperature: temperature, stream: stream };
+  if (stream) body.stream_options = { include_usage: true };
+
+  var ctrl = new AbortController();
+  var timer = setTimeout(function () { ctrl.abort('timeout'); }, opts.timeout || CONFIG.REQUEST_TIMEOUT_MS);
+  if (signal) {
+    if (signal.aborted) ctrl.abort();
+    else signal.addEventListener('abort', function () { ctrl.abort(); });
+  }
+
+  var url = proxyUrl(CONFIG.PROXY_PREFIX + '/chat/completions') || (CONFIG.API + '/chat/completions');
+  var headers = isProxied() ? proxyHeaders() : polzaHeaders();
+  var res;
+  try {
+    res = await fetch(url, { method: 'POST', headers: headers, body: JSON.stringify(body), signal: ctrl.signal });
+  } catch (e) {
+    clearTimeout(timer);
+    if (String(e && e.name) === 'AbortError') throw new Error('Превышено время ожидания ответа модели (10 минут). Попробуйте модель побыстрее или короче описание.');
+    throw new Error('Нет связи с Polza AI: ' + (e && e.message ? e.message : e));
+  }
+  if (!res.ok) { var b = await res.text(); clearTimeout(timer); throw polzaError(res.status, b); }
+
+  // Без потока — просто JSON
+  if (!stream || !res.body) {
+    var j = await res.json(); clearTimeout(timer);
+    var ch = (j.choices || [])[0] || {};
+    return { text: (ch.message && ch.message.content) || '', finishReason: ch.finish_reason || null, usage: j.usage || null, provider: j.provider || null };
+  }
+
+  var reader = res.body.getReader(), dec = new TextDecoder('utf-8');
+  var buf = '', text = '', finish = null, usage = null, provider = null;
+  try {
+    for (; ;) {
+      var step = await reader.read();
+      if (step.done) break;
+      buf += dec.decode(step.value, { stream: true });
+      var nl;
+      while ((nl = buf.indexOf('\n')) >= 0) {
+        var line = buf.slice(0, nl).trim();
+        buf = buf.slice(nl + 1);
+        if (!line || line.charAt(0) === ':') continue;
+        if (line.indexOf('data:') !== 0) continue;
+        var payload = line.slice(5).trim();
+        if (payload === '[DONE]') continue;
+        var chunk;
+        try { chunk = JSON.parse(payload); } catch (e) { continue; }
+        if (chunk.provider) provider = chunk.provider;
+        var c0 = (chunk.choices || [])[0] || {};
+        var d = c0.delta || {};
+        if (typeof d.content === 'string' && d.content) {
+          text += d.content;
+          if (onDelta) { try { onDelta(d.content, text); } catch (e) { } }
+        }
+        if (c0.finish_reason) finish = c0.finish_reason;
+        if (chunk.usage) usage = chunk.usage;
+      }
+    }
+  } finally { clearTimeout(timer); }
+  return { text: text, finishReason: finish, usage: usage, provider: provider };
+}
+
+/* Каталог моделей: доступен без ключа, поэтому цены/лимиты всегда актуальные. */
+async function polzaModels() {
+  if (window.__modelsCache && Date.now() - window.__modelsCache.at < 3600000) return window.__modelsCache.data;
+  var res = await fetch(proxyUrl(CONFIG.PROXY_PREFIX + '/models') || (CONFIG.API + '/models'));
+  if (!res.ok) throw polzaError(res.status, await res.text());
+  var j = await res.json();
+  var list = (j.data || j || []).map(function (m) {
+    var tp = m.top_provider || {};
+    var p = tp.pricing || {};
+    return {
+      id: m.id, name: m.name || m.id, type: m.type || 'chat',
+      ctx: tp.context_length || null, out: tp.max_completion_tokens || null,
+      rIn: p.prompt_per_million ? parseFloat(p.prompt_per_million) : null,
+      rOut: p.completion_per_million ? parseFloat(p.completion_per_million) : null,
+      per: p.per_request ? parseFloat(p.per_request) : null
+    };
+  });
+  window.__modelsCache = { at: Date.now(), data: list };
+  return list;
+}
+
+async function polzaBalance() {
+  var res = await fetch(proxyUrl(CONFIG.PROXY_PREFIX + '/balance') || (CONFIG.API + '/balance'),
+    { headers: isProxied() ? proxyHeaders() : { 'Authorization': 'Bearer ' + getKey() } });
+  if (!res.ok) throw polzaError(res.status, await res.text());
+  var j = await res.json();
+  return { available: parseFloat(j.available || j.amount || 0), spent: parseFloat(j.spentAmount || 0) };
+}
+
+/* Ожидание результата генерации картинки: POST возвращает id, результат забираем опросом. */
+async function polzaWaitMedia(id, onTick) {
+  var t0 = Date.now();
+  while (Date.now() - t0 < CONFIG.IMAGE_POLL_TIMEOUT) {
+    await sleep(2500);
+    var res = await fetch(proxyUrl(CONFIG.PROXY_PREFIX + '/media/' + id) || (CONFIG.API + '/media/' + id),
+      { headers: isProxied() ? proxyHeaders() : { 'Authorization': 'Bearer ' + getKey() } });
+    if (!res.ok) continue;
+    var j = await res.json();
+    if (onTick) { try { onTick(j.status, Math.round((Date.now() - t0) / 1000)); } catch (e) { } }
+    if (j.status === 'completed') {
+      var url = (j.data && j.data[0] && (j.data[0].url || j.data[0])) || j.url || j.content || null;
+      if (!url) throw new Error('Генерация завершилась без ссылки на файл');
+      return { url: url, cost: (j.usage && j.usage.cost_rub) || 0, raw: j };
+    }
+    if (j.status === 'failed' || j.status === 'cancelled') {
+      throw new Error('Генерация картинки не удалась: ' + JSON.stringify((j.error || {})).slice(0, 160));
+    }
+  }
+  throw new Error('Картинка не дождалась результата (4 минуты)');
+}
+
+/* Генерация картинки по описанию. */
+async function polzaImage(opts) {
+  var model = opts.model || 'google/gemini-2.5-flash-image';
+  var prompt = opts.prompt;
+  var start = await fetch(proxyUrl(CONFIG.PROXY_PREFIX + '/images/generations') || (CONFIG.API + '/images/generations'), {
+    method: 'POST', headers: isProxied() ? proxyHeaders() : polzaHeaders(),
+    body: JSON.stringify({ model: model, prompt: prompt, n: 1, size: 'auto', response_format: 'url' })
+  });
+  if (!start.ok) throw polzaError(start.status, await start.text());
+  var j = await start.json();
+  var id = j.requestId || j.id || (j.data && j.data[0] && j.data[0].id);
+  if (!id) {
+    var direct = j.data && j.data[0] && j.data[0].url;
+    if (direct) return { url: direct, cost: (j.usage && j.usage.cost_rub) || 0 };
+    throw new Error('Не понял ответ генератора картинок: ' + JSON.stringify(j).slice(0, 160));
+  }
+  return await polzaWaitMedia(id, opts.onTick);
+}
+
+/* Правка/ретушь загруженного фото (Photoshop-вкладка). */
+async function polzaEditImage(opts) {
+  var model = opts.model || 'google/gemini-2.5-flash-image';
+  var data = opts.dataUrl;
+  var start = await fetch(proxyUrl(CONFIG.PROXY_PREFIX + '/media') || (CONFIG.API + '/media'), {
+    method: 'POST', headers: isProxied() ? proxyHeaders() : polzaHeaders(),
+    body: JSON.stringify({ model: model, input: { prompt: opts.prompt, images: [{ type: 'base64', data: data }] } })
+  });
+  if (!start.ok) throw polzaError(start.status, await start.text());
+  var j = await start.json();
+  var id = j.id || j.requestId;
+  if (!id) throw new Error('Не понял ответ медиа-API: ' + JSON.stringify(j).slice(0, 160));
+  return await polzaWaitMedia(id, opts.onTick);
+}
+
+/* ----------------------------- ФОТОГРАФИИ ----------------------------- */
+
+var NICHE_QUERIES = {
+  'IT / SaaS / Стартап': ['startup office team working', 'software developer laptop code', 'business meeting whiteboard', 'abstract technology gradient'],
+  'E-commerce / Магазин': ['online shopping delivery boxes', 'product photography studio', 'warehouse logistics shelves', 'customer unboxing parcel'],
+  'Ресторан / Кафе': ['coffee shop interior', 'espresso cup barista', 'restaurant table served food', 'fresh bakery pastries'],
+  'Клиника / Медицина': ['modern clinic interior', 'doctor patient consultation', 'medical equipment clean room', 'dentist chair office'],
+  'Фитнес / Спорт': ['modern gym interior', 'personal trainer workout', 'fitness dumbbells equipment', 'running treadmill gym'],
+  'Недвижимость': ['modern apartment interior design', 'luxury house exterior', 'real estate agent handshake keys', 'city residential buildings'],
+  'Образование / Курсы': ['students studying classroom', 'laptop online course notebook', 'teacher explaining whiteboard', 'library books reading'],
+  'Красота / Салон': ['beauty salon interior', 'hairdresser styling client hair', 'manicure nails closeup', 'cosmetics products flatlay'],
+  'Авто / Детейлинг': ['car detailing polishing', 'luxury car showroom', 'auto repair service garage', 'car wash foam'],
+  'Юрист / Консалтинг': ['law office interior books', 'business handshake meeting', 'contract documents signing', 'consultant presentation office'],
+  'Портфолио / Личный бренд': ['photographer holding camera', 'creative workspace desk', 'professional portrait businessperson', 'designer studio monitor'],
+  'Креатив / Агентство / Дизайн': ['creative agency office', 'designer working monitor', 'photo studio lighting setup', 'brainstorming sticky notes']
+};
+var DEFAULT_QUERIES = ['modern office team meeting', 'business workspace laptop', 'city architecture modern', 'professional portrait business'];
+
+var Photos = {
+  memo: lsJson(CONFIG.LS_PHOTOS, '{}'),
+
+  queriesFor(businessType) {
+    var key = String(businessType || '').trim();
+    if (NICHE_QUERIES[key]) return NICHE_QUERIES[key];
+    for (var k in NICHE_QUERIES) { if (k.split(' ')[0] && key.indexOf(k.split(' ')[0]) === 0) return NICHE_QUERIES[k]; }
+    return DEFAULT_QUERIES;
+  },
+
+  /* Настоящий поиск фотографий. Без ключей и без бэкенда:
+     1) Openverse (свободные лицензии, CORS разрешён);
+     2) свои ключи Unsplash / Pexels / Pixabay, если пользователь их вставил;
+     3) Wikimedia Commons — как запасной вариант.
+     Дальше результаты фильтруются от архивных чёрно-белых снимков и сортируются по качеству. */
+  ARCHIVE_WORDS: /(18\d\d|19\d\d|20[0-1]\d|archiv|historic|history|engraving|etching|lithograph|drawing|sketch|painting|postcard|poster|stamp|manuscript|museum|memorial|monument|map of|carte|пикант|gravure)/i,
+  BAD_TITLE: /(logo|clipart|icon|diagram|chart|screenshot|scan of|document|text|signature|seal|banner of|coat of arms|qr code)/i,
+
+  score(item, query) {
+    var sc = 0;
+    var t = (String(item.title || '') + ' ' + String(item.tags || '')).toLowerCase();
+    var words = query.toLowerCase().split(/\s+/).filter(function (w) { return w.length > 3; });
+    var hits = words.filter(function (w) { return t.indexOf(w) >= 0; }).length;
+    sc += hits * 3;
+    var w = item.width || 0, h = item.height || 0;
+    if (w >= 2400) sc += 2; else if (w >= 1400) sc += 1.5; else if (w >= 1000) sc += 0.5; else sc -= 2;
+    if (w && h) { var ratio = w / h; if (ratio > 1.2 && ratio < 2.4) sc += 1; if (ratio < 0.75) sc -= 1.5; }
+    if (this.ARCHIVE_WORDS.test(t)) sc -= 6;
+    if (this.BAD_TITLE.test(t)) sc -= 8;
+    if (item.source === 'pexels' || item.source === 'pixabay' || item.source === 'unsplash') sc += 3;
+    if (item.source === 'openverse') sc += 1;
+    if (item.source === 'commons') sc -= 0.5;
+    return sc;
+  },
+
+  clean(list, query) {
+    var self = this;
+    var seen = {}, seenTitles = {};
+    return list.filter(function (x) {
+      if (!x || !x.url || !/^https:\/\//.test(x.url)) return false;
+      var key = x.url.replace(/[?#].*$/, '').toLowerCase();
+      var titleKey = String(x.title || '').toLowerCase().replace(/[^a-zа-я0-9]+/g, '').slice(0, 45);
+      if (seen[key] || (titleKey && seenTitles[titleKey])) return false;
+      seen[key] = 1;
+      if (titleKey) seenTitles[titleKey] = 1;
+      var t = String(x.title || '') + ' ' + String(x.tags || '');
+      if (self.ARCHIVE_WORDS.test(t) || self.BAD_TITLE.test(t)) return false;
+      if (x.width && x.height && (x.width < 900 || x.height < 600)) return false;
+      if (/\.(svg|gif|tif|tiff)(\?|$)/i.test(x.url)) return false;
+      return true;
+    }).sort(function (a, b) { return self.score(b, query) - self.score(a, query); });
+  },
+
+  async search(query, count) {
+    count = count || 8;
+    var memoKey = query + '|' + count;
+    if (this.memo[memoKey] && Date.now() - this.memo[memoKey].at < 86400000) return this.memo[memoKey].items;
+
+    if (isProxied()) {
+      try {
+        var sres = await fetch(proxyUrl('/api/photos') + '?q=' + encodeURIComponent(query) + '&count=' + count);
+        if (sres.ok) {
+          var sj = await sres.json();
+          var serverItems = (sj.images || []).map(function (x) { return Object.assign({}, x, { query: query }); });
+          if (serverItems.length) {
+            this.memo[memoKey] = { at: Date.now(), items: serverItems };
+            lsSet(CONFIG.LS_PHOTOS, JSON.stringify(this.memo));
+            return serverItems;
+          }
+        }
+      } catch (e) { }
+    }
+
+    var bag = [];
+    async function tryProvider(name, fn) {
+      try { var r = await fn.call(Photos); if (r && r.length) bag = bag.concat(r); } catch (e) { }
+    }
+    await Promise.all([
+      tryProvider('pexels', function () { return this.searchPexels(query, count); }),
+      tryProvider('unsplash', function () { return this.searchUnsplash(query, count); }),
+      tryProvider('pixabay', function () { return this.searchPixabay(query, count); })
+    ]);
+    bag = this.clean(bag, query);
+    if (bag.length < 3) bag = bag.concat(this.clean(await this.searchOpenverse(query, count).catch(function () { return []; }), query));
+    if (bag.length < 3) bag = bag.concat(this.clean(await this.searchCommons(query, count).catch(function () { return []; }), query));
+    bag = this.clean(bag.concat([]), query);
+    var items = bag.slice(0, count);
+    if (items.length) { this.memo[memoKey] = { at: Date.now(), items: items }; lsSet(CONFIG.LS_PHOTOS, JSON.stringify(this.memo)); }
+    return items;
+  },
+
+  async searchOpenverse(query, count) {
+    var url = 'https://api.openverse.org/v1/images/?q=' + encodeURIComponent(query) +
+      '&page_size=' + Math.min(20, count * 4) + '&license_type=commercial&mature=false';
+    var res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+    if (!res.ok) return [];
+    var j = await res.json();
+    return (j.results || []).map(function (r) {
+      var full = r.url || r.foreign_landing_url;
+      return {
+        url: full, thumb: r.thumbnail || full,
+        title: r.title || query, author: r.creator || '', license: (r.license || '') + ' ' + (r.license_version || ''),
+        source: 'openverse', query: query,
+        width: r.width || 0, height: r.height || 0,
+        tags: (r.tags || []).map(function (t) { return t.name || t; }).join(' ')
+      };
+    }).filter(function (x) { return x.url; });
+  },
+
+  async searchPexels(query, count) {
+    var key = (lsGet('ns_pexels_key_v2', '') || '').trim();
+    if (!key) return [];
+    var res = await fetch('https://api.pexels.com/v1/search?query=' + encodeURIComponent(query) +
+      '&per_page=' + count + '&orientation=landscape', { headers: { 'Authorization': key } });
+    if (!res.ok) return [];
+    var j = await res.json();
+    return (j.photos || []).map(function (r) {
+      return {
+        url: (r.src && (r.src.large2x || r.src.large)) || r.url, thumb: (r.src && r.src.medium) || r.url,
+        title: r.alt || query, author: r.photographer || '', license: 'Pexels License',
+        source: 'pexels', query: query, width: r.width, height: r.height
+      };
+    }).filter(function (x) { return x.url; });
+  },
+
+  async searchPixabay(query, count) {
+    var key = (lsGet('ns_pixabay_key_v2', '') || '').trim();
+    if (!key) return [];
+    var res = await fetch('https://pixabay.com/api/?key=' + encodeURIComponent(key) + '&q=' + encodeURIComponent(query) +
+      '&image_type=photo&orientation=horizontal&safesearch=true&per_page=' + Math.max(3, count));
+    if (!res.ok) return [];
+    var j = await res.json();
+    return (j.hits || []).map(function (r) {
+      return {
+        url: r.largeImageURL || r.webformatURL, thumb: r.webformatURL,
+        title: (r.tags || query), author: r.user || '', license: 'Pixabay License',
+        source: 'pixabay', query: query, width: r.imageWidth, height: r.imageHeight
+      };
+    }).filter(function (x) { return x.url; });
+  },
+
+  async searchUnsplash(query, count) {
+    var key = (lsGet(CONFIG.LS_UNSPLASH, '') || '').trim();
+    if (!key) return [];
+    var res = await fetch('https://api.unsplash.com/search/photos?query=' + encodeURIComponent(query) +
+      '&per_page=' + count + '&orientation=landscape&client_id=' + encodeURIComponent(key));
+    if (!res.ok) return [];
+    var j = await res.json();
+    return (j.results || []).map(function (r) {
+      return {
+        url: r.urls && (r.urls.regular || r.urls.full), thumb: r.urls && r.urls.small,
+        title: r.alt_description || query, author: r.user && r.user.name, license: 'Unsplash License', source: 'unsplash', query: query
+      };
+    }).filter(function (x) { return x.url; });
+  },
+
+  async searchCommons(query, count) {
+    var api = 'https://commons.wikimedia.org/w/api.php?action=query&generator=search' +
+      '&gsrsearch=' + encodeURIComponent('filetype:bitmap ' + query) + '&gsrlimit=' + count + '&gsrnamespace=6' +
+      '&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=1600&format=json&origin=*';
+    var res = await fetch(api);
+    if (!res.ok) return [];
+    var j = await res.json();
+    var pages = (j.query && j.query.pages) || {};
+    var out = [];
+    Object.keys(pages).forEach(function (k) {
+      var p = pages[k], ii = (p.imageinfo || [])[0];
+      if (!ii) return;
+      out.push({
+        url: ii.thumburl || ii.url, thumb: ii.thumburl || ii.url,
+        title: (p.title || '').replace(/^File:/, ''), author: '', license: 'Wikimedia Commons',
+        source: 'commons', query: query
+      });
+    });
+    return out;
+  },
+
+  /* Проверяем, что ссылка реально открывается как картинка (в браузере). */
+  verify(url, timeoutMs) {
+    return new Promise(function (resolve) {
+      if (!url) return resolve(false);
+      var img = new Image();
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; img.src = ''; resolve(false); } }, timeoutMs || 9000);
+      img.onload = function () { if (!done) { done = true; clearTimeout(t); resolve(img.naturalWidth > 40 && img.naturalHeight > 40); } };
+      img.onerror = function () { if (!done) { done = true; clearTimeout(t); resolve(false); } };
+      img.src = url;
+    });
+  },
+
+  /* Собирает набор проверенных фото под нишу: 4 запроса параллельно, отбор по качеству, проверка загрузки. */
+  async collect(businessType, want) {
+    want = want || 12;
+    var queries = this.queriesFor(businessType);
+    var self = this;
+    var lists = await Promise.all(queries.map(function (q) { return self.search(q, 8).catch(function () { return []; }); }));
+
+    // поочерёдно из каждого запроса — чтобы набор был разнообразным
+    var ordered = [];
+    var maxLen = Math.max.apply(null, lists.map(function (l) { return l.length; }).concat([0]));
+    for (var i = 0; i < maxLen; i++) {
+      for (var k = 0; k < lists.length; k++) { if (lists[k][i] && ordered.length < want + 6) ordered.push(lists[k][i]); }
+    }
+    var checks = await Promise.all(ordered.map(function (item) { return self.verify(item.url); }));
+    return ordered.filter(function (item, i) { return checks[i]; }).slice(0, want);
+  }
+};
+
+/* ----------------------------- ZIP ----------------------------- */
+var Zip = {
+  crcTable: (function () {
+    var table = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) {
+      var c = n;
+      for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+    return table;
+  })(),
+  crc32(bytes) {
+    var c = 0xFFFFFFFF;
+    for (var i = 0; i < bytes.length; i++) c = this.crcTable[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+    return (c ^ 0xFFFFFFFF) >>> 0;
+  },
+  /* files: [{name, content}] -> Blob (zip, без сжатия — быстро и без зависимостей) */
+  create(files) {
+    var enc = new TextEncoder();
+    var parts = [], central = [], offset = 0;
+    var now = new Date();
+    var time = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() / 2)) & 0xFFFF;
+    var date = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+
+    function u16(v) { return [v & 0xFF, (v >> 8) & 0xFF]; }
+    function u32(v) { return [v & 0xFF, (v >>> 8) & 0xFF, (v >>> 16) & 0xFF, (v >>> 24) & 0xFF]; }
+
+    files.forEach(function (f) {
+      var nameBytes = enc.encode(f.name);
+      var data = enc.encode(f.content);
+      var crc = Zip.crc32(data);
+      var local = [].concat([0x50, 0x4B, 0x03, 0x04], u16(20), u16(0), u16(0), u16(time), u16(date),
+        u32(crc), u32(data.length), u32(data.length), u16(nameBytes.length), u16(0));
+      parts.push(new Uint8Array(local), nameBytes, data);
+      central.push({ name: nameBytes, crc: crc, size: data.length, offset: offset });
+      offset += local.length + nameBytes.length + data.length;
+    });
+
+    var centralStart = offset, centralSize = 0;
+    central.forEach(function (c) {
+      var rec = [].concat([0x50, 0x4B, 0x01, 0x02], u16(20), u16(20), u16(0), u16(0), u16(time), u16(date),
+        u32(c.crc), u32(c.size), u32(c.size), u16(c.name.length), u16(0), u16(0), u16(0), u16(0), u32(0), u32(c.offset));
+      var arr = new Uint8Array(rec);
+      parts.push(arr, c.name);
+      centralSize += rec.length + c.name.length;
+    });
+    var end = [].concat([0x50, 0x4B, 0x05, 0x06], u16(0), u16(0), u16(files.length), u16(files.length),
+      u32(centralSize), u32(centralStart), u16(0));
+    parts.push(new Uint8Array(end));
+    return new Blob(parts, { type: 'application/zip' });
+  }
+};
+
+
+/* ===== app.gen.js ===== */
+/* ============================================================================
+   NeuraSite AI — ГЕНЕРАЦИЯ
+   Промпты, конвейер генерации (одна страница / много страниц), постобработка,
+   проверка качества, экспорт.
+   ========================================================================== */
+
+/* ------------------------- ДИЗАЙН-КОНТРАКТ ------------------------- */
+/* Один и тот же свод правил идёт в генерацию, в доработку и в доп. страницы —
+   именно так сайт получается цельным, а не «набором секций». */
+function designBrief(form) {
+  var colors = (form.colors || '').trim();
+  var colorRule = colors
+    ? 'Палитра из брифа: ' + colors + '. Построй на ней токены: --brand (основной), --brand-2 (акцент), --ink (текст), --bg (фон). Проверь контраст текста к фону (не ниже 4.5:1).'
+    : 'Подбери премиальную палитру под нишу (3 цвета + нейтрали), задай токены --brand, --brand-2, --ink, --bg, --muted.';
+  return [
+    'ДИЗАЙН-СИСТЕМА (обязательна к исполнению):',
+    '- Стиль: ' + (form.style || 'modern premium') + '.',
+    '-' + colorRule,
+    '- Токены в :root (цвета, радиусы --r-sm 10px / --r 16px / --r-lg 28px, тени, шрифты). Дальше используй только токены, никаких случайных значений.',
+    '- Шрифты: подключи Google Fonts (заголовки — выразительный гротеск: Manrope/Space Grotesk/Unbounded; текст — Inter/Manrope). Заголовки: clamp() от 32px до 72px, межстрочный 1.05-1.15, letter-spacing -0.02em.',
+    '- Сетка: контейнер max-width 1200-1280px, отступы секций 96-140px по вертикали, gap 24-32px. Всё на CSS Grid/Flex.',
+    '- Критические стили (hero, карточки, кнопки, сетки, хедер, футер) пиши СВОИМИ классами в <style>. Tailwind подключай тоже, но сайт обязан выглядеть правильно даже если Tailwind не загрузился.',
+    '- Кнопки: 3 состояния (обычное, hover со сдвигом/тенью, focus-visible). Карточки: радиус, бордер, мягкая тень, hover-подъём. Иконки — SVG инлайном.',
+    '- Полная адаптивность: 360px, 768px, 1280px. Проверь, чтобы на 360px ничего не вылезало по горизонтали (никаких фиксированных ширин больше 100%).'
+  ].join('\n');
+}
+
+/* ------------------------- ПРОМПТЫ ------------------------- */
+function systemPrompt(form, photos, isMulti) {
+  var lines = [];
+  lines.push('Ты — арт-директор и senior frontend-разработчик уровня Awwwards, Linear, Stripe, Vercel. Ты верстаешь сайты, которые продают.');
+  lines.push('');
+  lines.push(designBrief(form));
+  lines.push('');
+  lines.push('ТЕХНИЧЕСКИЕ ПРАВИЛА:');
+  lines.push('1. Один HTML-файл на страницу, весь CSS и JS внутри самого файла (тег style и тег скрипта). Внешние CDN — только Tailwind (https://cdn.tailwindcss.com) и Google Fonts. Никаких сборщиков, jQuery и т.п.');
+  lines.push('2. Пиши РЕАЛЬНЫЙ продающий контент на русском языке под нишу: заголовки-офферы, конкретные выгоды, цифры, цены, названия услуг, отзывы с именами, адреса. НИКАКОГО «Lorem ipsum», «Текст текст», «Компания №1», пустых заглушек.');
+  lines.push('3. Каждая интерактивная кнопка и ссылка обязана работать. Если кнопка ведёт «в никуда» — пусть ведёт на якорь существующей секции или открывает модальное окно. Не оставляй onclick с неопределёнными функциями.');
+  lines.push('4. Мобильное меню: гамбургер с рабочим JS (открытие/закрытие, закрытие по клику на ссылку).');
+  lines.push('5. Форма заявки: валидация + имитация отправки + красивое модальное окно «Спасибо, мы свяжемся».');
+  lines.push('6. Анимации: hover-микроанимации, плавные переходы, появление секций при скролле. ВАЖНО: не прячь контент — НИКАКИХ opacity:0 / visibility:hidden в базовых стилях секций и текстов. Если делаешь появление при скролле, повесь на <html> класс, который включает скрытие только при работающем JS, а сам класс снимай сразу после добавления наблюдателя. Сайт обязан полностью читаться даже при выключенном JavaScript.');
+  lines.push('7. Доступность: alt у картинок, aria-label у кнопок-иконок, семантические теги header/main/section/footer, один <h1> на страницу.');
+  lines.push('8. В <head> обязательны: <meta name="viewport" content="width=device-width, initial-scale=1">, <title>, <meta name="description">, Open Graph-теги.');
+  lines.push('9. Верни ТОЛЬКО код страницы, начиная с <!DOCTYPE html>. Без markdown, без ```html, без пояснений до и после кода.');
+  lines.push('');
+  if (isMulti) {
+    lines.push('ЭТО МНОГОСТРАНИЧНЫЙ САЙТ. Каждая страница — отдельный файл: index.html, ' + (form.pages || []).slice(1).map(function (p) { return pageFile(p) + ', '; }).join('') + 'и так далее.');
+    lines.push('Ссылки в меню и футере — обычные ссылки на файлы: <a href="catalog.html">Каталог</a>. Хедер и футер на всех страницах ОДИНАКОВЫЕ (тот же код, тот же порядок пунктов).');
+  } else {
+    lines.push('ЭТО ОДНА СТРАНИЦА. Все секции идут подряд, навигация — якорные ссылки вида <a href="#services">.');
+  }
+  return lines.join('\n');
+}
+
+function photoBlock(photos, mode) {
+  if (mode === 'none') {
+    return 'ФОТОГРАФИИ: внешние фото не используй. Вместо картинок — CSS-градиенты, паттерны, крупная типографика, SVG-иллюстрации. Никаких <img> с внешними URL.';
+  }
+  if (!photos || !photos.length) {
+    return 'ФОТОГРАФИИ: галерея недоступна. Вместо фото используй CSS-градиенты и SVG. НЕ вставляй ссылки вида images.unsplash.com с придуманными ID — они не открываются и ломают вид сайта.';
+  }
+  var head = 'ФОТОГРАФИИ: используй ТОЛЬКО эти ссылки (они проверены, все открываются). Не придумывай свои, не меняй ID. Ставь осмысленный alt на русском. Каждую фотографию используй максимум один раз, кроме случаев, где нужен фон.\n';
+  var list = photos.map(function (p, i) { return (i + 1) + ') ' + p.url + '  — ' + (p.title || p.query || 'фото'); }).join('\n');
+  return head + list;
+}
+
+function userPrompt(form, photos, isMulti) {
+  var out = [];
+  out.push('Название: ' + (form.site_name || 'Без названия'));
+  out.push('Сфера: ' + (form.business_type || 'не указана'));
+  out.push('Тип: ' + (isMulti ? 'многостраничный сайт' : siteTypeLabel(form.site_type)));
+  out.push('Стиль: ' + (form.style || 'modern premium'));
+  out.push('Цвета: ' + (form.colors || 'подбери под нишу'));
+  var c = form.contacts || {};
+  var contacts = [];
+  if (c.phone) contacts.push('телефон ' + c.phone);
+  if (c.email) contacts.push('e-mail ' + c.email);
+  if (c.address) contacts.push('адрес ' + c.address);
+  if (c.telegram) contacts.push('Telegram ' + c.telegram);
+  if (c.instagram) contacts.push('Instagram ' + c.instagram);
+  if (contacts.length) out.push('Контакты (использовать именно эти): ' + contacts.join(', '));
+  if (c.cta) out.push('Главный призыв (текст кнопки): ' + c.cta);
+  out.push('Пожелания клиента: ' + (form.prompt || '—'));
+  out.push('');
+  out.push(photoBlock(photos, form.photoMode));
+  out.push('');
+
+  if (isMulti) {
+    out.push('СТРАНИЦЫ, КОТОРЫЕ НУЖНО СДЕЛАТЬ (каждая — отдельный файл):');
+    (form.pages || []).forEach(function (p, i) {
+      out.push((i + 1) + '. ' + p + ' → файл ' + pageFile(p) + ' — ' + pageHint(p));
+    });
+    out.push('');
+    out.push('Сейчас сделай ТОЛЬКО страницу «' + (form.pages[0] || 'Главная') + '» (файл index.html). Остальные сделаем следующими запросами в том же стиле.');
+  } else {
+    out.push('СЕКЦИИ (в этом порядке, каждая со своим смыслом и контентом):');
+    sectionSpec(form.site_type).forEach(function (s, i) { out.push((i + 1) + '. ' + s); });
+  }
+  out.push('');
+  out.push('Собери финальную страницу сейчас. Сначала <!DOCTYPE html>, дальше весь код целиком.');
+  return out.join('\n');
+}
+
+function siteTypeLabel(t) {
+  return ({ multipage: 'многостраничный сайт', landing: 'одностраничный лендинг', ecommerce: 'интернет-магазин', portfolio: 'сайт-визитка/портфолио' })[t] || 'лендинг';
+}
+
+function sectionSpec(type) {
+  var base = [
+    'HERO: оффер в 5-9 слов + подзаголовок с выгодой + 2 кнопки (главная и вторичная) + фото/визуал. Никаких «Добро пожаловать на наш сайт».',
+    'ПРЕИМУЩЕСТВА: 3-4 карточки с иконками, конкретика вместо воды.',
+    'ГЛАВНЫЙ БЛОК ПРОДУКТА/УСЛУГИ: как это работает (3-4 шага) или ключевое предложение с фото.',
+    'СОЦИАЛЬНОЕ ДОКАЗАТЕЛЬСТВО: отзывы с именами и результатами, логотипы/цифры.',
+    'CTA-БЛОК: призыв + форма или кнопка.',
+    'ФУТЕР: контакты, меню, соцсети, копирайт.'
+  ];
+  if (type === 'ecommerce') return ['HERO с оффером и баннером', 'КАТАЛОГ: 6-8 карточек товаров с ценой, фото, кнопкой «В корзину»', 'ПРЕИМУЩЕСТВА магазина (доставка, гарантия, оплата)', 'ХИТЫ/АКЦИИ с таймером', 'ОТЗЫВЫ покупателей', 'CTA + ФУТЕР'];
+  if (type === 'portfolio') return ['HERO: имя, специальность, фото', 'ПОРТФОЛИО: сетка 6-9 работ с фильтром по категориям и лайтбоксом', 'УСЛУГИ И ЦЕНЫ', 'ОБО МНЕ: факты и опыт', 'ОТЗЫВЫ', 'КОНТАКТЫ + ФУТЕР'];
+  if (type === 'landing') return base.concat(['ТАРИФЫ: 3 плана с выделенным популярным', 'FAQ: 5-6 вопросов аккордеоном']);
+  return base;
+}
+
+function pageHint(name) {
+  var n = String(name).toLowerCase();
+  if (n.indexOf('каталог') >= 0 || n.indexOf('услуг') >= 0 || n.indexOf('товар') >= 0 || n.indexOf('магазин') >= 0) return 'каталог услуг/товаров: фильтры по категориям, карточки с ценой и кнопкой заказа, блок «как заказать»';
+  if (n.indexOf('о компании') >= 0 || n.indexOf('о нас') >= 0 || n.indexOf('компан') >= 0) return 'о компании: история, миссия, цифры в цифрах, команда с фото, принципы работы';
+  if (n.indexOf('отзыв') >= 0) return 'отзывы: 6-8 подробных отзывов с именами, рейтингом и результатами, логотипы клиентов';
+  if (n.indexOf('контакт') >= 0) return 'контакты: адрес, карта-схема (SVG/CSS), телефоны, мессенджеры, форма связи, часы работы';
+  if (n.indexOf('цен') >= 0 || n.indexOf('тариф') >= 0) return 'цены: 3-4 тарифа, таблица сравнения, ответы на вопросы об оплате';
+  if (n.indexOf('блог') >= 0 || n.indexOf('стать') >= 0) return 'блог: сетка статей с обложками, датами и категориями';
+  if (n.indexOf('команд') >= 0 || n.indexOf('врач') >= 0 || n.indexOf('специалист') >= 0) return 'команда: карточки специалистов с фото, опытом и специализацией';
+  return 'отдельная страница сайта в том же дизайне с содержательным контентом по теме';
+}
+function pageFile(name) {
+  var n = slugify(name);
+  if (n === 'glavnaya' || n === 'main' || n === 'home' || n === 'index' || n === 'главная') return 'index.html';
+  return (n === 'catalog' ? 'catalog' : n) + '.html';
+}
+
+/* ------------------------- ОЧИСТКА И ПОЧИНКА ------------------------- */
+function extractHtml(raw) {
+  var text = String(raw || '');
+  text = text.replace(/^\uFEFF/, '');
+  var fence = text.match(/```(?:html)?\s*([\s\S]*?)```/i);
+  if (fence && fence[1] && /<\w+[\s>]/.test(fence[1])) text = fence[1];
+  else text = text.replace(/```(?:html)?/gi, '');
+  var start = text.search(/<!DOCTYPE html|<html[\s>]/i);
+  if (start > 0) text = text.slice(start);
+  var end = text.lastIndexOf('</html>');
+  if (end >= 0) text = text.slice(0, end + 7);
+  return text.trim();
+}
+
+/* Стили-страховки: работают даже если Tailwind/GSAP не загрузились. */
+var GUARD_CSS = [
+  '/* NeuraSite guard: базовые правила, чтобы сайт не «рассыпался» */',
+  '*,*::before,*::after{box-sizing:border-box}',
+  'html{-webkit-text-size-adjust:100%}',
+  'body{margin:0;overflow-x:hidden;font-family:Manrope,Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.6}',
+  'img,video,svg{max-width:100%;height:auto}',
+  'button,input,textarea,select{font:inherit;color:inherit}',
+  'a{color:inherit;text-decoration:none}',
+  '.ns-container{width:100%;max-width:1240px;margin:0 auto;padding:0 20px}',
+  '.ns-reveal{opacity:0;transform:translateY(26px);transition:opacity .75s cubic-bezier(.2,.7,.2,1),transform .75s cubic-bezier(.2,.7,.2,1)}',
+  '.ns-reveal.ns-in{opacity:1;transform:none}',
+  '.ns-img-fallback{background:linear-gradient(135deg,rgba(108,92,255,.25),rgba(0,217,255,.18));display:flex;align-items:center;justify-content:center;color:#fff;font-size:13px;letter-spacing:.04em;text-transform:uppercase;min-height:220px}',
+  '.ns-modal{position:fixed;inset:0;background:rgba(6,8,16,.72);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px}',
+  '.ns-modal[hidden]{display:none}',
+  '.ns-modal-card{background:#fff;color:#111;border-radius:22px;padding:32px;max-width:440px;text-align:center;box-shadow:0 30px 80px rgba(0,0,0,.35)}',
+  '.ns-to-top{position:fixed;right:20px;bottom:20px;width:46px;height:46px;border-radius:50%;border:0;background:#111;color:#fff;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s;z-index:900}',
+  '.ns-to-top.ns-show{opacity:.92;pointer-events:auto}',
+  '@media (max-width:768px){header nav{display:flex;flex-wrap:wrap;gap:10px}}',
+  '@media (prefers-reduced-motion:reduce){.ns-reveal{opacity:1!important;transform:none!important;transition:none!important}}'
+].join('\n');
+
+/* Универсальная интерактивность: меню, скролл, формы, аккордеоны, счётчики, фоллбеки. */
+var RUNTIME_JS = window.__NS_RUNTIME__ || '';
+
+/* Чистим потенциально опасные/ломкие места и добавляем страховки. */
+function finishHtml(raw, ctx) {
+  ctx = ctx || {};
+  var html = extractHtml(raw);
+  if (!html) return { html: '', report: [{ ok: false, label: 'Модель вернула пустой ответ', detail: 'Попробуйте ещё раз или смените модель' }] };
+
+  if (!/<!DOCTYPE/i.test(html)) html = '<!DOCTYPE html>\n' + html;
+  if (!/<\/html>\s*$/i.test(html)) html = html.replace(/\s*$/, '\n</body>\n</html>\n');
+
+  // незакрытый <script> в конце — типичный признак обрыва: закрываем принудительно
+  var openScripts = (html.match(/<script\b/gi) || []).length;
+  var closeScripts = (html.match(/<\/script>/gi) || []).length;
+  if (openScripts > closeScripts) html = html.replace(/<\/body>\s*<\/html>\s*$/i, '<\/script>\n</body>\n</html>');
+
+  // защитный CSS + пул фото
+  var poolJson = JSON.stringify((ctx.photos || []).map(function (p) { return p.url; }));
+  var injectHead = '<style id="ns-guard">\n' + GUARD_CSS + '\n</style>\n' +
+    '<script id="ns-pool">window.__nsPhotoPool = ' + poolJson + ';' + (ctx.isMulti ? 'window.__nsMulti = true;' : '') + '<\/script>\n';
+  if (/<\/head>/i.test(html)) html = html.replace(/<\/head>/i, injectHead + '</head>');
+  else html = html.replace(/<body[^>]*>/i, injectHead + '<body>');
+
+  // рантайм — последним в body, чтобы он видел уже созданные элементы
+  var injectEnd = '<script id="ns-runtime">\n' + RUNTIME_JS + '\n<\/script>\n';
+  if (/<\/body>/i.test(html)) html = html.replace(/<\/body>/i, injectEnd + '</body>');
+  else html += injectEnd;
+
+  // чистим пустые href="javascript:void(0)" без обработчика
+  html = html.replace(/href="javascript:void\(0\)"(?![^>]*onclick)/gi, 'href="#"');
+
+  return { html: html, report: null };
+}
+
+/* ------------------------- ПРОВЕРКА КАЧЕСТВА ------------------------- */
+async function validateSite(html, ctx) {
+  var checks = [];
+  function add(ok, label, detail) { checks.push({ ok: !!ok, label: label, detail: detail || '' }); }
+
+  add(/<!DOCTYPE html>/i.test(html), 'Документ HTML5', '');
+  add(/<title>[^<]{3,}<\/title>/i.test(html), 'Есть <title>', '');
+  add(/name="viewport"/i.test(html), 'Мобильная адаптация (viewport)', '');
+  add(/<h1[^>]*>/i.test(html), 'Заголовок H1', '');
+  var h1count = (html.match(/<h1[^>]*>/gi) || []).length;
+  add(h1count === 1, 'Ровно один H1', 'найдено: ' + h1count);
+  add(/<header[\s>]/i.test(html), 'Шапка сайта', '');
+  add(/<footer[\s>]/i.test(html), 'Футер', '');
+  add(/@media\s*\(max-width/i.test(html), 'Адаптивные стили (@media)', '');
+  add(!/lorem ipsum|текст текст|здесь могла быть/i.test(html), 'Осмысленный текст (без «Lorem ipsum»)', '');
+  add(!/images\.unsplash\.com\/photo-[0-9a-f]{6,}-/i.test(html.replace(/#[0-9a-f]{3,6}/gi, '')), 'Нет выдуманных ссылок на фото', '');
+
+  var dupIds = [];
+  var ids = {};
+  (html.match(/\sid="([^"]+)"/g) || []).forEach(function (m) {
+    var v = m.replace(/\sid="/, '').replace(/"$/, '');
+    if (ids[v]) dupIds.push(v); ids[v] = 1;
+  });
+  add(dupIds.length === 0, 'Уникальные id элементов', dupIds.length ? 'дубли: ' + dupIds.slice(0, 5).join(', ') : '');
+
+  var undefinedFns = [];
+  var htmlNoStrings = html;
+  var m2, re2 = /on(?:click|submit|change)="([A-Za-z_$][\w$]*)\(/g;
+  while ((m2 = re2.exec(htmlNoStrings))) {
+    var fn = m2[1];
+    if (!/window\./.test(html) || new RegExp('function\\s+' + fn + '\\b|' + fn + '\\s*=\\s*function').test(html)) continue;
+    if (undefinedFns.indexOf(fn) < 0) undefinedFns.push(fn);
+  }
+  add(true, 'Обработчики кнопок', undefinedFns.length ? 'подстрахованы заглушками: ' + undefinedFns.slice(0, 4).join(', ') : 'все на месте');
+
+  // живые проверки в браузере
+  var doc = new DOMParser().parseFromString(html, 'text/html');
+  var imgs = Array.prototype.slice.call(doc.images || []);
+  add(imgs.length > 0 || ctx.form.photoMode === 'none' || !(ctx.photos || []).length, 'Фотографии на странице', imgs.length ? 'найдено: ' + imgs.length : 'нет (режим без фото)');
+  add(imgs.every(function (i) { return (i.getAttribute('alt') || '').length > 2; }), 'У всех фото есть alt', '');
+
+  var badImgs = [];
+  if (imgs.length) {
+    var results = await Promise.all(imgs.slice(0, 14).map(function (img) {
+      return Photos.verify(img.getAttribute('src'), 8000);
+    }));
+    imgs.slice(0, 14).forEach(function (img, i) { if (!results[i]) badImgs.push(img.getAttribute('src')); });
+    add(badImgs.length === 0, 'Все фото открываются', badImgs.length ? 'битых: ' + badImgs.length : 'проверено: ' + Math.min(imgs.length, 14));
+  }
+
+  var hasAnim = /@keyframes/i.test(html) || /gsap|ScrollTrigger|IntersectionObserver|data-reveal/i.test(html);
+  add(hasAnim, 'Анимации есть', hasAnim ? '' : 'добавлен автоматический показ секций при скролле');
+  add(/<form[\s>]/i.test(html) || !ctx.form.features.includes('form'), 'Рабочая форма заявки', '');
+  add(/data-menu-toggle|burger|hamburger|mobile-menu|mobileMenu/i.test(html), 'Мобильное меню', 'создаётся автоматически, если модель его не сделала');
+  add(html.length < 700000, 'Размер файла', fmtSize(html.length));
+
+  return checks;
+}
+
+/* ------------------------- КОНВЕЙЕР ------------------------- */
+/* Генерация одной страницы с дозаписью при обрыве. */
+async function generatePage(opts) {
+  var form = opts.form, photos = opts.photos, isMulti = opts.isMulti;
+  var onProgress = opts.onProgress || function () { };
+  var model = opts.model || CONFIG.DEFAULT_MODEL;
+  var messages = [
+    { role: 'system', content: systemPrompt(form, photos, isMulti) },
+    { role: 'user', content: opts.userPromptText }
+  ];
+
+  var full = '';
+  var finish = null;
+  var usage = { in: 0, out: 0, cost: 0 };
+  var attempt = 0;
+
+  for (; ;) {
+    onProgress(attempt === 0 ? 'Модель пишет код…' : 'Дописываю оборванный фрагмент (' + attempt + ')…');
+    var res = await polzaChat({
+      model: model, messages: messages, maxTokens: CONFIG.MAX_OUT_TOKENS, temperature: 0.8,
+      onDelta: function (piece, all) { onProgress('Модель пишет код… ' + fmtSize(full.length + all.length)); }
+    });
+    full += res.text;
+    if (res.usage) {
+      usage.in += res.usage.prompt_tokens || 0;
+      usage.out += res.usage.completion_tokens || 0;
+      usage.cost += (res.usage.cost_rub || res.usage.cost || 0);
+    }
+    finish = res.finishReason;
+    attempt++;
+    if (finish !== 'length' || attempt > CONFIG.MAX_CONTINUATIONS) break;
+
+    var tail = full.slice(-8000);
+    messages = messages.concat([
+      { role: 'assistant', content: tail },
+      { role: 'user', content: 'Вывод оборвался на середине файла. Продолжи РОВНО с места обрыва и доведи страницу до конца (закрой все теги, добавь script и </body></html>). Не повторяй уже написанное, не начинай заново, без пояснений — только продолжение кода.' }
+    ]);
+  }
+
+  return { raw: full, finishReason: finish, usage: usage, truncated: finish === 'length' };
+}
+
+/* Генерация всех страниц многостраничника с единым дизайном. */
+async function generateSitePages(opts) {
+  var form = opts.form, onProgress = opts.onProgress || function () { };
+  var model = opts.model, photos = opts.photos;
+  var pages = form.pages && form.pages.length ? form.pages : ['Главная'];
+  var files = [];
+
+  // 1. Главная страница — задаёт дизайн-систему и хедер/футер
+  onProgress('Страница 1 из ' + pages.length + ': ' + pages[0] + '…');
+  var home = await generatePage({
+    form: form, photos: photos, isMulti: pages.length > 1, model: model,
+    userPromptText: userPrompt(form, photos, pages.length > 1)
+  });
+  var homeFixed = finishHtml(home.raw, { photos: photos, isMulti: pages.length > 1 });
+  files.push({ name: 'index.html', content: homeFixed.html, usage: home.usage, finishReason: home.finishReason, truncated: home.truncated });
+
+  // вытаскиваем шапку/подвал первой страницы, чтобы остальные были в том же дизайне
+  var doc = new DOMParser().parseFromString(homeFixed.html, 'text/html');
+  var headerHtml = doc.querySelector('header') ? doc.querySelector('header').outerHTML.slice(0, 6000) : '';
+  var footerHtml = doc.querySelector('footer') ? doc.querySelector('footer').outerHTML.slice(0, 3000) : '';
+
+  // 2. Остальные страницы
+  for (var i = 1; i < pages.length; i++) {
+    onProgress('Страница ' + (i + 1) + ' из ' + pages.length + ': ' + pages[i] + '…');
+    var theme = (homeFixed.html.match(/<style[\s\S]*?<\/style>/i) || [''])[0].slice(0, 12000);
+    var pageForm = Object.assign({}, form, { pages: pages });
+    var text = [
+      'Ты делаешь ОТДЕЛЬНУЮ страницу «' + pages[i] + '» (файл ' + pageFile(pages[i]) + ') многостраничного сайта «' + (form.site_name || '') + '».',
+      'Дизайн-система, шрифты, палитра и компоненты — как на главной странице. Ниже её <style>: переиспользуй те же токены и классы.',
+      '',
+      'СТИЛЬ ГЛАВНОЙ СТРАНИЦЫ (используй те же токены/классы):',
+      theme,
+      '',
+      'ШАПКА ГЛАВНОЙ (повтори ровно такую же, только подставь правильные ссылки меню на файлы):',
+      headerHtml,
+      '',
+      'ПОДВАЛ ГЛАВНОЙ (повтори):',
+      footerHtml,
+      '',
+      'СОДЕРЖИМОЕ ЭТОЙ СТРАНИЦЫ: ' + pageHint(pages[i]),
+      'Пожелания клиента по всему сайту: ' + (form.prompt || '—'),
+      'Сфера: ' + (form.business_type || '') + '. Название: ' + (form.site_name || '') + '.',
+      '',
+      photoBlock(photos, form.photoMode),
+      '',
+      'Верни ТОЛЬКО этот файл целиком: <!DOCTYPE html> … </html>, без markdown и пояснений.',
+      'Ссылки в меню/футере — на файлы: index.html, ' + pages.slice(1).map(pageFile).join(', ') + '.'
+    ].join('\n');
+
+    var page = await generatePage({
+      form: pageForm, photos: photos, isMulti: true, model: model, userPromptText: text
+    });
+    var fixed = finishHtml(page.raw, { photos: photos, isMulti: true });
+    files.push({ name: pageFile(pages[i]), content: fixed.html, usage: page.usage, finishReason: page.finishReason, truncated: page.truncated });
+    void pageForm;
+  }
+  return files;
+}
+
+/* Правки в чате: тот же дизайн-контракт + постобработка. */
+async function refineSite(currentHtml, message, ctx) {
+  var model = CONFIG.REFINE_MODEL;
+  var system = [
+    'Ты senior frontend-разработчик. Ты дорабатываешь готовый сайт по просьбе клиента.',
+    'Правила: верни ПОЛНЫЙ обновлённый HTML целиком (не фрагмент), сохрани всё, что не просили менять.',
+    'Сохраняй дизайн-систему, классы, анимации и адаптивность. Не удаляй рабочие скрипты и меню.',
+    'Не вставляй ссылки на фото с придуманными ID. Можно использовать только эти URL: ' + JSON.stringify((ctx.photos || []).map(function (p) { return p.url; })).slice(0, 2000),
+    'Ответ — только код, начиная с <!DOCTYPE html>, без пояснений и markdown.'
+  ].join('\n');
+  var user = 'Просьба клиента: ' + message + '\n\nТекущий HTML страницы:\n' + currentHtml.slice(0, 400000) + '\n\nВерни полный обновлённый HTML.';
+  var res = await polzaChat({ model: model, messages: [{ role: 'system', content: system }, { role: 'user', content: user }], maxTokens: CONFIG.MAX_OUT_TOKENS, temperature: 0.6 });
+  var fixed = finishHtml(res.text, ctx);
+  return { html: fixed.html, usage: res.usage, model: model };
+}
+
+
+/* ===== app.ui.js ===== */
+/* ============================================================================
+   NeuraSite AI — ИНТЕРФЕЙС
+   Кнопки, генерация, предпросмотр, чат, картинки, экспорт, самопроверка.
+   ========================================================================== */
+
+var state = {
+  html: '',
+  files: [],          // многостраничник: [{name, content}]
+  photos: [],
+  generating: false,
+  model: lsGet('ns_model_v2', CONFIG.DEFAULT_MODEL),
+  imageModel: lsGet('ns_image_model_v2', 'google/gemini-2.5-flash-image'),
+  balance: null,
+  lastCost: 0
+};
+
+/* ------------------------- ФОРМА ------------------------- */
+function currentPhotoMode() {
+  var el = document.querySelector('input[name=photoMode]:checked');
+  return el ? el.value : 'search';
+}
+function getFormData() {
+  var pagesRaw = ($('pagesInput') && $('pagesInput').value) || 'Главная, Каталог, О компании, Отзывы, Контакты';
+  var pages = pagesRaw.split(',').map(function (s) { return s.trim(); }).filter(Boolean).slice(0, 8);
+  if (!pages.length) pages = ['Главная'];
   return {
-    prompt: document.getElementById('mainPrompt').value.trim(),
-    site_name: document.getElementById('siteName').value.trim() || 'NeuraSite',
-    business_type: document.getElementById('businessType').value,
-    site_type: document.getElementById('siteType').value,
-    style: document.getElementById('styleSelect').value,
-    colors: document.getElementById('colorInput').value,
+    prompt: ($('mainPrompt') && $('mainPrompt').value.trim()) || '',
+    site_name: ($('siteName') && $('siteName').value.trim()) || 'NeuraSite',
+    business_type: ($('businessType') && $('businessType').value) || '',
+    site_type: ($('siteType') && $('siteType').value) || 'landing',
+    style: ($('styleSelect') && $('styleSelect').value) || 'modern premium like Linear/Stripe',
+    colors: ($('colorInput') && $('colorInput').value) || '',
     contacts: {
-      phone: document.getElementById('contactPhone').value,
-      email: document.getElementById('contactEmail').value,
-      address: document.getElementById('contactAddress').value,
-      telegram: document.getElementById('contactTg').value,
-      instagram: document.getElementById('contactInst').value,
-      cta: document.getElementById('ctaText').value,
+      phone: ($('contactPhone') && $('contactPhone').value) || '',
+      email: ($('contactEmail') && $('contactEmail').value) || '',
+      address: ($('contactAddress') && $('contactAddress').value) || '',
+      telegram: ($('contactTg') && $('contactTg').value) || '',
+      instagram: ($('contactInst') && $('contactInst').value) || '',
+      cta: ($('ctaText') && $('ctaText').value) || ''
     },
-    features
+    features: $$('.feature-check:checked').map(function (c) { return c.value; }),
+    photoMode: currentPhotoMode(),
+    pages: pages
   };
 }
-
-// ---------- Backend vs Direct ----------
-async function callGenerateAPI(data){
-  const apiKey = getKey();
-  
-  // Автоматически фиксируем лучшую модель для верстки кода и анимаций
-  const activeModel = 'anthropic/claude-sonnet-4-5';
-
-  const isMultipage = data.site_type === 'multipage' || 
-    (data.prompt && (data.prompt.toLowerCase().includes('многостранич') || data.prompt.toLowerCase().includes('страниц') || data.prompt.toLowerCase().includes('раздел') || data.prompt.toLowerCase().includes('каталог')));
-
-  const multipageInstruction = isMultipage ? `
-КАТЕГОРИЧЕСКОЕ ТРЕБОВАНИЕ: ЭТО ДОЛЖЕН БЫТЬ ПОЛНОЦЕННЫЙ МНОГОСТРАНИЧНЫЙ САЙТ (SPA) В ОДНОМ ФАЙЛЕ!
-НЕ ДЕЛАЙ ОБЫЧНЫЙ СКРОЛЛ-ЛЕНДИНГ!
-Сделай отдельные полноценные разделы-экраны:
-1. <section id="page-home" class="page-view active min-h-screen"> — Главная страница с мощным Hero, оффером, ключевыми преимуществами и кнопками перехода.
-2. <section id="page-catalog" class="page-view hidden min-h-screen"> — Отдельная страница Услуг/Каталога с фильтрами, карточками, ценами и кнопками заказа.
-3. <section id="page-about" class="page-view hidden min-h-screen"> — Отдельная страница «О компании»: история, факты в цифрах, лица команды с фото, принципы.
-4. <section id="page-reviews" class="page-view hidden min-h-screen"> — Отдельная страница «Отзывы»: развернутые отзывы клиентов, кейсы и социальные доказательства.
-5. <section id="page-contacts" class="page-view hidden min-h-screen"> — Отдельная страница «Контакты»: адреса, телефоны, интерактивная стильная карта-макет и форма связи.
-
-В шапке (header) и мобильном меню КАЖДАЯ ссылка должна переключать экраны через JavaScript:
-<a href="javascript:void(0)" onclick="showPage('catalog')" class="nav-link ...">Каталог</a>
-
-Внизу страницы ОБЯЗАТЕЛЬНО рабочий скрипт переключения:
-window.showPage = function(pageId) {
-  document.querySelectorAll('.page-view').forEach(p => p.classList.add('hidden'));
-  const target = document.getElementById('page-' + pageId);
-  if(target) { target.classList.remove('hidden'); }
-  window.scrollTo({top: 0, behavior: 'smooth'});
-  const mob = document.getElementById('mobileMenu');
-  if(mob) mob.classList.add('hidden');
-};
-` : `
-ТРЕБОВАНИЕ: Сделай длинный, конверсионный и визуально богатый лендинг с плавным якорным скроллом по всем блокам.
-`;
-
-  const system = `Ты — ведущий креативный веб-дизайнер и Senior Frontend разработчик мирового уровня (Awwwards, Apple, Stripe, Linear).
-Твоя цель: создать ПОЛНЫЙ, ПОТРЯСАЮЩЕ КРАСИВЫЙ, ЖИВОЙ HTML-файл сайта с анимациями и картинками.
-
-ГЛАВНЫЕ ТРЕБОВАНИЯ:
-1. ОДИН ФАЙЛ: весь HTML, Tailwind CSS (https://cdn.tailwindcss.com), шрифты Google Fonts (Inter, Manrope, Space Grotesk), Lucide/FontAwesome и GSAP (https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.2/gsap.min.js + ScrollTrigger).
-2. ДИЗАЙН И АНИМАЦИИ:
-   - Дорогой современный стиль: стеклянные карточки (backdrop-blur-xl bg-white/5 border border-white/10), мягкие неоновые подсветки, плавные градиенты.
-   - Анимации GSAP: плавный fade-up появление секций, микро-интерактив при наведении hover:scale-105, hover:shadow-2xl.
-3. КАРТИНКИ:
-   - Вставляй реальные проверенные фотографии высокого качества с https://images.unsplash.com по тематике ниши.
-   - Всегда добавляй onerror fallback на картинки: onerror="this.onerror=null;this.src='https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&fit=crop';"
-4. ИНТЕРАКТИВ И МОБИЛЬНОЕ МЕНЮ:
-   - Меню гамбургер на мобильных телефонах ОБЯЗАНО иметь рабочий JavaScript клик (открытие и закрытие).
-   - Форма заявки должна иметь рабочую имитацию отправки с красивым модальным окном благодарности.
-5. ${multipageInstruction}
-
-Русский язык. Верни ТОЛЬКО чистый код HTML, начав сразу с <!DOCTYPE html>, без пояснений и без markdown.`;
-
-  const user = `Название: ${data.site_name}
-Сфера: ${data.business_type}
-Тип сайта: ${isMultipage ? 'Многостраничный (SPA с разделами Главная, Каталог, О компании, Отзывы, Контакты)' : data.site_type}
-Стиль: ${data.style}
-Цвета: ${data.colors || 'премиальная палитра под нишу'}
-Контакты: ${JSON.stringify(data.contacts)}
-Описание задачи: ${data.prompt}
-СГЕНЕРИРУЙ ПОЛНЫЙ САЙТ СЕЙЧАС.`;
-
-  const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({
-      model: activeModel,
-      messages:[
-        {role:'system',content:system},
-        {role:'user',content:user}
-      ],
-      temperature:0.8,
-      max_tokens:16000
-    })
-  });
-  
-  if(!resp.ok){
-    const err = await resp.text();
-    throw new Error(`Polza API error: ${err.slice(0, 300)}`);
-  }
-  
-  const j = await resp.json();
-  let html = j.choices[0].message.content;
-  html = html.replace(/^```html\s*/i,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
-  return {html, model: activeModel, source:'direct'};
+function isMultiForm(data) { return data.site_type === 'multipage'; }
+function togglePagesBlock() {
+  var block = $('pagesBlock');
+  if (block) block.classList.toggle('hidden', ($('siteType') && $('siteType').value) !== 'multipage');
 }
 
-async function callRefineAPI(currentHtml, message){
-  const apiKey = getKey();
-  const model = document.getElementById('modelSelect')?.value?.includes('haiku') ? getModel() : 'anthropic/claude-haiku-4-5';
-  
-  try{
-    const res = await fetch('/api/refine', {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({current_html: currentHtml, message, model, api_key: apiKey || undefined})
-    });
-    if(res.ok){
-      const j = await res.json();
-      return j.html;
+/* ------------------------- МОДЕЛИ ------------------------- */
+function applyModelToSelects(id) {
+  ['modelSelect', 'modelSelectMobile'].forEach(function (sid) {
+    var sel = $(sid); if (!sel) return;
+    if (!Array.prototype.some.call(sel.options, function (o) { return o.value === id; })) {
+      var o = document.createElement('option'); o.value = id; sel.appendChild(o);
     }
-  }catch(e){}
-
-  if(!apiKey) throw new Error('Нужен Polza ключ');
-  
-  const system = `Ты senior frontend, дорабатываешь сайт. Дают текущий HTML и запрос что исправить. Верни ПОЛНЫЙ обновленный HTML, сохранив все остальное. Только код, без объяснений.`;
-  const user = `Запрос: ${message}\n\nТекущий HTML:\n${currentHtml.slice(0,80000)}\n\nВерни ПОЛНЫЙ обновленный HTML.`;
-  
-  const resp = await fetch('https://polza.ai/api/v1/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-    body: JSON.stringify({model, messages:[{role:'system',content:system},{role:'user',content:user}], temperature:0.7, max_tokens:16000})
+    sel.value = id;
   });
-  if(!resp.ok) throw new Error('Polza API error');
-  const j = await resp.json();
-  let html = j.choices[0].message.content;
-  html = html.replace(/^```html\s*/,'').replace(/^```\s*/,'').replace(/\s*```$/,'').trim();
+}
+function getModel() { return state.model || CONFIG.DEFAULT_MODEL; }
+function selectModel(id, type) {
+  if (type === 'image') {
+    state.imageModel = id; lsSet('ns_image_model_v2', id);
+    toast('Модель картинок: ' + id.split('/').pop(), '🎨');
+  } else {
+    state.model = id; lsSet('ns_model_v2', id); applyModelToSelects(id);
+    toast('Модель: ' + id.split('/').pop(), '🧠');
+  }
+  renderModels();
+  var m = $('brainsModal'); if (m) m.classList.add('hidden');
+}
+function renderModels() {
+  var live = (window.__modelsCache && window.__modelsCache.data) || [];
+  function priceOf(id, fallbackIn, fallbackOut, fallbackPer) {
+    var m = live.filter(function (x) { return x.id === id; })[0];
+    if (!m) return { in: fallbackIn, out: fallbackOut, per: fallbackPer };
+    return { in: m.rIn || fallbackIn, out: m.rOut || fallbackOut, per: m.per || fallbackPer };
+  }
+  var textEl = $('textModelsList');
+  if (textEl) {
+    textEl.innerHTML = MODELS.text.map(function (m) {
+      var p = priceOf(m.id, m.rIn, m.rOut);
+      var perSite = m.out ? Math.round((p.out || 0) * (CONFIG.MAX_OUT_TOKENS / 1000000) + (p.in || 0) * 0.01) : null;
+      var active = getModel() === m.id;
+      return '<div class="rounded-xl p-3 cursor-pointer transition border ' + (active ? 'bg-[#6C5CFF]/15 border-[#6C5CFF]/50' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]') + '" onclick="selectModel(\'' + m.id + '\')">' +
+        '<div class="flex items-center justify-between mb-1"><span class="font-bold text-[13px]">' + esc(m.name) + '</span><span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/10">' + esc(m.badge) + '</span></div>' +
+        '<div class="text-[11px] text-white/50">' + esc(m.note) + '</div>' +
+        '<div class="flex flex-wrap gap-2 mt-2 text-[10px] font-mono"><span class="px-1.5 py-0.5 rounded bg-black/30">' + (p.in ? Math.round(p.in) + ' ₽/1M вх' : '—') + '</span><span class="px-1.5 py-0.5 rounded bg-black/30">' + (p.out ? Math.round(p.out) + ' ₽/1M исх' : '—') + '</span>' + (perSite ? '<span class="px-1.5 py-0.5 rounded bg-[#00D492]/20">≈ ' + perSite + ' ₽ / сайт</span>' : '') + '</div>' +
+        '<div class="text-[10px] font-mono text-[#8B7DFF] mt-1 truncate">' + esc(m.id) + '</div></div>';
+    }).join('');
+  }
+  var imgEl = $('imageModelsList');
+  if (imgEl) {
+    imgEl.innerHTML = MODELS.image.map(function (m) {
+      var p = priceOf(m.id, null, null, m.per);
+      var active = state.imageModel === m.id;
+      return '<div class="rounded-xl p-3 cursor-pointer transition border ' + (active ? 'bg-[#FF4D8D]/15 border-[#FF4D8D]/50' : 'bg-white/[0.03] border-white/5 hover:bg-white/[0.06]') + '" onclick="selectModel(\'' + m.id + '\',\'image\')">' +
+        '<div class="flex items-center justify-between mb-1"><span class="font-bold text-[13px]">' + esc(m.name) + '</span><span class="text-[10px] px-2 py-0.5 rounded-full bg-white/10 border border-white/10">' + esc(m.badge) + '</span></div>' +
+        '<div class="text-[11px] text-white/50">' + esc(m.note) + '</div>' +
+        '<div class="mt-2 text-[10px] font-mono"><span class="px-1.5 py-0.5 rounded bg-black/30">' + (p.per ? p.per + ' ₽ / фото' : 'по токенам') + '</span></div>' +
+        '<div class="text-[10px] font-mono text-[#FF4D8D] mt-1 truncate">' + esc(m.id) + '</div></div>';
+    }).join('');
+  }
+  var vidEl = $('videoModelsList');
+  if (vidEl) vidEl.innerHTML = '<div class="text-[11px] text-white/40">Видео в генераторе сайтов пока не используется: дорого и долго. Доступно в Polza API отдельно.</div>';
+}
+
+/* ------------------------- ИНДИКАТОР ЗАГРУЗКИ ------------------------- */
+function setProgress(text, percent) {
+  var step = $('loadingStep'); if (step) step.textContent = text;
+  var bar = $('loadingBar'); if (bar && percent != null) bar.style.width = Math.max(5, Math.min(100, percent)) + '%';
+}
+function showLoading(on) {
+  var overlay = $('loadingOverlay'); if (!overlay) return;
+  overlay.classList.toggle('hidden', !on);
+  overlay.classList.toggle('flex', on);
+}
+
+/* ------------------------- ГЕНЕРАЦИЯ ------------------------- */
+async function generateSite() {
+  var data = getFormData();
+  if (!data.prompt) { toast('Опиши, какой сайт нужен', '⚠️'); if ($('mainPrompt')) $('mainPrompt').focus(); return; }
+  if (state.generating) { toast('Генерация уже идёт', '⏳'); return; }
+  if (!getKey() && !isProxied()) { if ($('keyModal')) $('keyModal').classList.remove('hidden'); toast('Нужен ключ Polza AI', '🔑'); return; }
+
+  state.generating = true;
+  var multi = isMultiForm(data);
+  var btn = $('generateBtn'); if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Генерирую…'; }
+  showLoading(true);
+  if ($('previewPlaceholder')) $('previewPlaceholder').classList.add('hidden');
+
+  var t0 = Date.now();
+  var cost = 0;
+  try {
+    /* 1. Фотографии */
+    state.photos = [];
+    if (data.photoMode === 'search') {
+      setProgress('Ищу реальные фото под нишу…', 8);
+      try {
+        state.photos = await Photos.collect(data.business_type, 12);
+        setProgress('Нашёл ' + state.photos.length + ' проверенных фото', 16);
+      } catch (e) { toast('Поиск фото не сработал — сделаю сайт на градиентах', '⚠️'); }
+      if (!state.photos.length) setProgress('Реальные фото не найдены — использую CSS-графику', 16);
+    } else if (data.photoMode === 'ai') {
+      setProgress('Генерирую фото для сайта через ИИ…', 6);
+      try {
+        state.photos = await generateNichePhotos(data, function (i, n) { setProgress('Фото ' + i + ' из ' + n + '…', 6 + i * 4); });
+      } catch (e) { toast('ИИ-фото не получились: ' + e.message, '⚠️'); }
+    }
+
+    /* 2. Код сайта */
+    var files = [];
+    if (multi) {
+      setProgress('Собираю многостраничный сайт…', 25);
+      files = await generateSitePages({
+        form: data, photos: state.photos, model: getModel(),
+        onProgress: function (msg) { setProgress(msg, 40); }
+      });
+    } else {
+      setProgress('Модель пишет сайт…', 25);
+      var page = await generatePage({
+        form: data, photos: state.photos, isMulti: false, model: getModel(),
+        userPromptText: userPrompt(data, state.photos, false),
+        onProgress: function (msg) { setProgress(msg, 45); }
+      });
+      var fixed = finishHtml(page.raw, { photos: state.photos, isMulti: false });
+      cost += (page.usage && page.usage.cost) || 0;
+      if (page.truncated) toast('Ответ модели был обрезан — дотянул, но проверьте страницу', '⚠️');
+      files = [{ name: 'index.html', content: fixed.html, usage: page.usage }];
+    }
+
+    files.forEach(function (f) { cost += (f.usage && f.usage.cost) || 0; });
+    state.files = files.map(function (f) { return { name: f.name, content: f.content }; });
+    state.html = files[0].content;
+
+    /* 3. Проверка качества */
+    setProgress('Проверяю, что всё работает…', 80);
+    var problems = files.filter(function (f) { return !f.content || f.content.length < 800; });
+    if (problems.length) toast('Страница «' + problems[0].name + '» получилась пустой — сгенерируйте её заново', '⚠️');
+
+    /* 4. Показ */
+    setProgress('Готово', 100);
+    renderPreview(state.html, multi);
+    renderPagesBar();
+    var el = Date.now() - t0;
+    if ($('statTime')) $('statTime').textContent = (el / 1000).toFixed(1) + ' сек';
+    if ($('statSize')) $('statSize').textContent = fmtSize(state.html.length) + (multi ? ' × ' + files.length + ' стр.' : '');
+    if ($('statModel')) $('statModel').textContent = getModel().split('/').pop();
+    state.lastCost = cost;
+    if ($('statCost')) $('statCost').textContent = cost ? fmtRub(cost) : '—';
+
+    var report = await validateSite(state.html, { photos: state.photos, form: data });
+    var bad = report.filter(function (c) { return !c.ok; });
+    addChatMessage('assistant', 'Готово! ' + (multi ? 'Сделал сайт из ' + files.length + ' страниц' : 'Сделал сайт') +
+      ' за ' + (el / 1000).toFixed(1) + ' сек на модели ' + getModel().split('/').pop() + '.' +
+      (bad.length ? ' Замечания: ' + bad.map(function (b) { return b.label; }).join('; ') + '.' : ' Все проверки пройдены: фото открываются, меню и формы рабочие, анимации на месте.') +
+      ' Что улучшить?');
+    toast(multi ? 'Сайт из ' + files.length + ' страниц готов! 🔥' : 'Сайт готов! 🔥', '✦');
+
+    genHistory.unshift({ name: data.site_name, prompt: data.prompt.slice(0, 60), time: new Date().toLocaleTimeString(), size: state.html.length, multi: multi, pages: files.length });
+    genHistory = genHistory.slice(0, 12);
+    lsSet(CONFIG.LS_HISTORY, JSON.stringify(history));
+    renderHistory();
+    refreshBalance();
+  } catch (e) {
+    toast('Ошибка: ' + e.message, '❌');
+    addChatMessage('assistant', 'Ошибка генерации: ' + e.message);
+    if ($('previewPlaceholder')) $('previewPlaceholder').classList.remove('hidden');
+  } finally {
+    state.generating = false;
+    showLoading(false);
+    if (btn) { btn.disabled = false; btn.innerHTML = '<span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>'; }
+  }
+}
+
+/* ИИ-фото для сайта (по желанию): 3 картинки под нишу. */
+async function generateNichePhotos(data, onStep) {
+  var niche = data.business_type || 'business';
+  var prompts = [
+    'Профессиональная фотография для сайта: ' + niche + '. Широкий кадр интерьера/сцены, естественный свет, премиальная рекламная подача, без текста и логотипов.',
+    'Крупный план деталей по теме «' + niche + '»: атмосферная предметная съёмка, мягкий свет, размытый фон, без текста.',
+    'Команда или клиент в среде «' + niche + '»: живая естественная сцена, профессиональная репортажная подача, без текста.'
+  ];
+  var out = [];
+  for (var i = 0; i < prompts.length; i++) {
+    onStep && onStep(i + 1, prompts.length);
+    var r = await polzaImage({ model: state.imageModel, prompt: prompts[i], onTick: function () { } });
+    out.push({ url: r.url, title: niche, source: 'ai', query: niche });
+  }
+  return out;
+}
+
+/* ------------------------- ПРЕДПРОСМОТР ------------------------- */
+function inlineAssets(html, files) {
+  // для предпросмотра многостраничника подставляем содержимое страниц вместо переходов
   return html;
 }
-
-// ---------- Generate ----------
-async function generateSite(){
-  const data = getFormData();
-  if(!data.prompt){
-    toast('Опиши какой сайт нужен!', '⚠️');
-    document.getElementById('mainPrompt').focus();
-    return;
-  }
-  if(isGenerating) return;
-  isGenerating = true;
-  
-  const btn = document.getElementById('generateBtn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Генерирую...';
-  
-  const overlay = document.getElementById('loadingOverlay');
-  overlay.classList.remove('hidden');
-  overlay.classList.add('flex');
-  document.getElementById('previewPlaceholder').classList.add('hidden');
-  
-  const steps = [
-    'Подключаюсь к Polza AI...',
-    'Claude Sonnet 4.5 думает над дизайном...',
-    'Пишу Tailwind + GSAP анимации...',
-    'Подбираю картинки с Unsplash...',
-    'Делаю адаптив и интерактив...',
-    'Финальные штрихи...'
-  ];
-  let step = 0;
-  const interval = setInterval(()=>{
-    if(step < steps.length){
-      document.getElementById('loadingStep').textContent = steps[step];
-      document.getElementById('loadingBar').style.width = `${15 + step*15}%`;
-      step++;
-    }
-  }, 800);
-  
-  const start = Date.now();
-  try{
-    const result = await callGenerateAPI(data);
-    currentHtml = result.html;
-    
-    clearInterval(interval);
-    document.getElementById('loadingBar').style.width = '100%';
-    document.getElementById('loadingStep').textContent = 'Готово! Рендерю...';
-    
-    setTimeout(()=>{
-      renderPreview(currentHtml);
-      overlay.classList.add('hidden');
-      overlay.classList.remove('flex');
-      
-      const elapsed = ((Date.now()-start)/1000).toFixed(1);
-      document.getElementById('statTime').textContent = `${elapsed} сек`;
-      document.getElementById('statSize').textContent = `${(currentHtml.length/1024).toFixed(1)} KB`;
-      document.getElementById('statModel').textContent = result.model.split('/').pop();
-      
-      // History
-      history.unshift({name: data.site_name, prompt: data.prompt.slice(0,60), time: new Date().toLocaleTimeString(), size: currentHtml.length});
-      history = history.slice(0,10);
-      localStorage.setItem('neuralsite_history', JSON.stringify(history));
-      renderHistory();
-      
-      addChatMessage('assistant', `Готово! ✨ Сгенерировал сайт "${data.site_name}" за ${elapsed} сек на модели ${result.model}. Как тебе? Скажи что улучшить — я сразу исправлю.`);
-      toast('Сайт сгенерирован! 🔥', '✦');
-    }, 600);
-    
-  }catch(e){
-    clearInterval(interval);
-    overlay.classList.add('hidden');
-    overlay.classList.remove('flex');
-    document.getElementById('previewPlaceholder').classList.remove('hidden');
-    toast(e.message, '❌');
-    addChatMessage('assistant', `Ошибка: ${e.message}. Проверь Polza API ключ и баланс на https://polza.ai/dashboard`);
-  }finally{
-    isGenerating = false;
-    btn.disabled = false;
-    btn.innerHTML = '<span class="text-[18px]">✦</span> Сгенерировать сайт <span class="text-[11px] font-mono bg-white/20 px-2 py-0.5 rounded-full">⌘ + Enter</span>';
-    if(getKey()) localStorage.setItem('polza_key', getKey());
-  }
-}
-
-function renderPreview(html){
-  const frame = document.getElementById('previewFrame');
-  const placeholder = document.getElementById('previewPlaceholder');
-  placeholder.classList.add('hidden');
+function renderPreview(html, isMulti) {
+  var frame = $('previewFrame');
+  if (!frame) return;
+  var placeholder = $('previewPlaceholder'); if (placeholder) placeholder.classList.add('hidden');
   frame.classList.remove('hidden');
   frame.srcdoc = html;
-  currentHtml = html;
-  document.getElementById('codeContent').textContent = html;
-  document.getElementById('codeSize').textContent = `${(html.length/1024).toFixed(1)} KB`;
+  state.html = html;
+  if ($('codeContent')) $('codeContent').textContent = html;
+  if ($('codeSize')) $('codeSize').textContent = fmtSize(html.length);
+  if ($('zipBtn')) $('zipBtn').classList.toggle('hidden', !(state.files && state.files.length > 1));
 }
-
-function setDevice(type){
-  const wrapper = document.getElementById('previewWrapper');
-  document.querySelectorAll('.device-btn').forEach(b=>{b.classList.remove('bg-white','text-black'); b.classList.add('text-white/60')});
-  document.getElementById(`btn-${type}`).classList.add('bg-white','text-black');
-  document.getElementById(`btn-${type}`).classList.remove('text-white/60');
-  
-  if(type==='desktop'){ wrapper.style.width='100%'; wrapper.style.margin='0'; }
-  if(type==='tablet'){ wrapper.style.width='768px'; wrapper.style.margin='0 auto'; }
-  if(type==='mobile'){ wrapper.style.width='390px'; wrapper.style.margin='0 auto'; }
+function renderPagesBar() {
+  var bar = $('pagesBar'); if (!bar) bar = ensurePagesBar();
+  if (!bar) return;
+  if (!state.files || state.files.length < 2) { bar.innerHTML = ''; bar.classList.add('hidden'); return; }
+  bar.classList.remove('hidden');
+  var current = state.html;
+  bar.innerHTML = '<span class="text-[11px] text-white/40 mr-1">Страницы:</span>' + state.files.map(function (f) {
+    var active = f.content === current;
+    return '<button onclick="showPreviewFile(\'' + f.name + '\')" class="px-2.5 py-1 rounded-lg text-[11px] ' + (active ? 'bg-[#6C5CFF] text-white font-bold' : 'btn-ghost') + '">' + esc(f.name.replace('.html', '')) + '</button>';
+  }).join('');
 }
-
-function toggleCode(){
-  document.getElementById('codeView').classList.toggle('hidden');
+function ensurePagesBar() {
+  var host = $('previewWrapper'); if (!host) return null;
+  var bar = document.createElement('div');
+  bar.id = 'pagesBar';
+  bar.className = 'hidden flex flex-wrap items-center gap-1.5 glass rounded-[12px] px-2.5 py-1.5 mb-2';
+  host.parentNode.insertBefore(bar, host);
+  return bar;
 }
-function copyCode(){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  navigator.clipboard.writeText(currentHtml);
-  toast('Код скопирован!', '📋');
+function showPreviewFile(name) {
+  var f = (state.files || []).filter(function (x) { return x.name === name; })[0];
+  if (!f) return;
+  renderPreview(f.content, true);
+  renderPagesBar();
 }
-function downloadSite(){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  const blob = new Blob([currentHtml], {type:'text/html'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `${(document.getElementById('siteName').value || 'site').replace(/\s+/g,'-').toLowerCase()}.html`;
-  a.click();
+function setDevice(type) {
+  var wrapper = $('previewWrapper');
+  $$('.device-btn').forEach(function (b) { b.classList.remove('bg-white', 'text-black'); b.classList.add('text-white/60'); });
+  var btn = $('btn-' + type); if (btn) { btn.classList.add('bg-white', 'text-black'); btn.classList.remove('text-white/60'); }
+  if (!wrapper) return;
+  if (type === 'desktop') { wrapper.style.width = '100%'; wrapper.style.margin = '0'; }
+  if (type === 'tablet') { wrapper.style.width = '768px'; wrapper.style.margin = '0 auto'; }
+  if (type === 'mobile') { wrapper.style.width = '390px'; wrapper.style.margin = '0 auto'; }
+}
+function toggleCode() { var v = $('codeView'); if (v) v.classList.toggle('hidden'); }
+function copyCode() {
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  navigator.clipboard.writeText(state.html).then(function () { toast('Код скопирован', '📋'); }).catch(function () { toast('Не удалось скопировать', '⚠️'); });
+}
+function downloadSite() {
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  var name = (($('siteName') && $('siteName').value) || 'site').trim();
+  var blob = new Blob([state.html], { type: 'text/html;charset=utf-8' });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = (state.files && state.files.length > 1 ? 'index' : slugify(name)) + '.html';
+  document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(url);
-  toast('Скачан!', '⬇');
+  toast('Файл скачан', '⬇');
 }
-function openInNewTab(){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  const w = window.open();
-  w.document.write(currentHtml);
-  w.document.close();
+function downloadZip() {
+  var files = (state.files && state.files.length ? state.files : [{ name: 'index.html', content: state.html }]).filter(function (f) { return f.content; });
+  if (!files.length) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  files = files.concat([{
+    name: 'README.txt',
+    content: 'Сайт сгенерирован в NeuraSite AI.\n\nФайлы:\n' + files.map(function (f) { return ' - ' + f.name; }).join('\n') +
+      '\n\nКак опубликовать:\n1) Загрузите все файлы в одну папку на хостинге (или перетащите папку на netlify.com/drop).\n' +
+      '2) Главная страница — index.html.\n3) Если картинки не грузятся на вашем домене — проверьте, что файлы лежат рядом (пути относительные).\n'
+  }]);
+  var blob = Zip.create(files);
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = slugify((($('siteName') && $('siteName').value) || 'site')) + '.zip';
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+  toast('Архив со всеми страницами скачан', '🗂');
 }
-function openFullscreen(){
-  const frame = document.getElementById('previewFrame');
-  if(frame.requestFullscreen) frame.requestFullscreen();
+function openInNewTab() {
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  var w = window.open('', '_blank');
+  if (!w) { toast('Браузер заблокировал новую вкладку', '⚠️'); return; }
+  w.document.write(state.html); w.document.close();
 }
-function shareSite(){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  // Create data URL or use localStorage sharing via URL hash (compress?)
-  const encoded = btoa(unescape(encodeURIComponent(currentHtml))).slice(0,2000);
-  toast('Скопируй ссылку из адресной строки после сохранения', '🔗');
+function openFullscreen() {
+  var frame = $('previewFrame');
+  if (frame && frame.requestFullscreen) frame.requestFullscreen();
+}
+function shareSite() {
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  var html = state.html;
+  function fallback() {
+    var blob = new Blob([html], { type: 'text/html' });
+    var url = URL.createObjectURL(blob);
+    navigator.clipboard.writeText(url).then(function () { toast('Ссылка на сайт скопирована (работает, пока открыта эта вкладка)', '🔗'); })
+      .catch(function () { toast('Скачайте HTML — так надёжнее', '⬇'); });
+  }
+  if (!('CompressionStream' in window)) return fallback();
+  try {
+    var stream = new Blob([html]).stream().pipeThrough(new CompressionStream('gzip'));
+    new Response(stream).arrayBuffer().then(function (buf) {
+      var bytes = new Uint8Array(buf), bin = '';
+      for (var i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      var b64 = btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      var link = location.origin + location.pathname + '#site=' + b64;
+      location.hash = 'site=' + b64;
+      navigator.clipboard.writeText(link).then(function () { toast('Ссылка со сайтом скопирована — можно отправлять клиенту', '🔗'); })
+        .catch(function () { toast('Ссылка в адресной строке — скопируйте её', '🔗'); });
+    }).catch(fallback);
+  } catch (e) { fallback(); }
+}
+async function loadSharedSite() {
+  var m = location.hash.match(/#site=([A-Za-z0-9_\-]+)/);
+  if (!m) return;
+  if (!('DecompressionStream' in window)) return;
+  try {
+    var b64 = m[1].replace(/-/g, '+').replace(/_/g, '/');
+    var bin = atob(b64), bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    var stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    var html = await new Response(stream).text();
+    state.html = html;
+    state.files = [{ name: 'index.html', content: html }];
+    renderPreview(html, false);
+    toast('Загружен присланный сайт', '🔗');
+  } catch (e) { toast('Не удалось открыть ссылку', '⚠️'); }
 }
 
-// ---------- Chat ----------
-function addChatMessage(role, text){
-  const cont = document.getElementById('chatMessages');
-  const div = document.createElement('div');
-  div.className = `chat-bubble ${role==='user' ? 'ml-8 bg-[#6C5CFF] text-white rounded-[14px] rounded-br-[4px]' : 'glass rounded-[14px] rounded-bl-[4px]'} p-3 text-[13px] leading-relaxed`;
+/* ------------------------- ЧАТ ------------------------- */
+function addChatMessage(role, text) {
+  var cont = $('chatMessages'); if (!cont) return;
+  var div = document.createElement('div');
+  div.className = 'chat-bubble ' + (role === 'user' ? 'ml-8 bg-[#6C5CFF] text-white rounded-[14px] rounded-br-[4px]' : 'glass rounded-[14px] rounded-bl-[4px]') + ' p-3 text-[13px] leading-relaxed';
   div.textContent = text;
   cont.appendChild(div);
   cont.scrollTop = cont.scrollHeight;
 }
-
-function quickChat(text){
-  document.getElementById('chatInput').value = text;
-  sendChat();
-}
-
-async function sendChat(){
-  const input = document.getElementById('chatInput');
-  const msg = input.value.trim();
-  if(!msg) return;
-  if(!currentHtml){
-    toast('Сначала сгенерируй сайт', '⚠️');
-    return;
-  }
+function quickChat(text) { if ($('chatInput')) { $('chatInput').value = text; sendChat(); } }
+async function sendChat() {
+  var input = $('chatInput'); if (!input) return;
+  var msg = input.value.trim();
+  if (!msg) return;
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  if (state.generating) { toast('Дождись окончания генерации', '⏳'); return; }
   addChatMessage('user', msg);
   input.value = '';
-  
-  const typing = document.createElement('div');
+  var typing = document.createElement('div');
+  typing.id = 'typing';
   typing.className = 'chat-bubble glass rounded-[14px] rounded-bl-[4px] p-3 flex gap-1';
   typing.innerHTML = '<span class="w-2 h-2 rounded-full bg-white/40 typing-dot"></span><span class="w-2 h-2 rounded-full bg-white/40 typing-dot"></span><span class="w-2 h-2 rounded-full bg-white/40 typing-dot"></span>';
-  typing.id = 'typing';
-  document.getElementById('chatMessages').appendChild(typing);
-  document.getElementById('chatMessages').scrollTop = 99999;
-  
-  try{
-    const newHtml = await callRefineAPI(currentHtml, msg);
-    document.getElementById('typing')?.remove();
-    renderPreview(newHtml);
-    addChatMessage('assistant', 'Готово! Исправил. Что еще улучшить?');
-    toast('Сайт обновлен!', '✦');
-  }catch(e){
-    document.getElementById('typing')?.remove();
-    addChatMessage('assistant', `Ошибка: ${e.message}`);
-    toast(e.message, '❌');
+  $('chatMessages').appendChild(typing);
+  $('chatMessages').scrollTop = 999999;
+  try {
+    var res = await refineSite(state.html, msg, { photos: state.photos, form: getFormData() });
+    var t = $('typing'); if (t) t.remove();
+    state.html = res.html;
+    state.files = [{ name: (state.files[0] && state.files[0].name) || 'index.html', content: res.html }];
+    renderPreview(res.html, false);
+    renderPagesBar();
+    if ($('statCost')) $('statCost').textContent = res.usage && (res.usage.cost_rub || res.usage.cost) ? fmtRub(res.usage.cost_rub || res.usage.cost) : $('statCost').textContent;
+    addChatMessage('assistant', 'Готово, обновил. Что ещё поправить?');
+    toast('Сайт обновлён', '✦');
+  } catch (e) {
+    var t2 = $('typing'); if (t2) t2.remove();
+    addChatMessage('assistant', 'Ошибка: ' + e.message);
+    toast('Ошибка: ' + e.message, '❌');
   }
 }
 
-// ---------- Images ----------
-async function searchImages(){
-  const q = document.getElementById('imageQuery').value.trim();
-  if(!q) return;
-  const cont = document.getElementById('imageResults');
+/* ------------------------- КАРТИНКИ ------------------------- */
+async function searchImages(queryId, resultsId) {
+  queryId = queryId || 'imageQuery'; resultsId = resultsId || 'imageResults1';
+  var q = ($(queryId) && $(queryId).value.trim()) || '';
+  if (!q) { toast('Напиши, что искать', '⚠️'); return; }
+  var cont = $(resultsId); if (!cont) return;
   cont.classList.remove('hidden');
-  cont.innerHTML = '<div class="col-span-3 text-center py-4 text-[12px] text-white/40">Ищу...</div>';
-  
-  try{
-    // Try backend
-    let images = [];
-    try{
-      const res = await fetch('/api/search-images', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({query:q, count:6})});
-      if(res.ok){ const j = await res.json(); images = j.images; }
-    }catch{}
-    
-    if(!images.length){
-      // Fallback unsplash
-      images = Array.from({length:6}, (_,i)=>({url:`https://images.unsplash.com/photo-${1490000000000+i*1000}?w=400&h=300&fit=crop&q=80&auto=format&ixlib=rb-4.0.3&ixid=${i}&q=${encodeURIComponent(q)}`, query:q}));
-      // Use real working urls
-      const real = [
-        `https://images.unsplash.com/photo-1497366216548-37526070297c?w=400&h=300&fit=crop`,
-        `https://images.unsplash.com/photo-1553877522-43269d4ea984?w=400&h=300&fit=crop`,
-        `https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=400&h=300&fit=crop`,
-        `https://images.unsplash.com/photo-1551434678-e076c223a692?w=400&h=300&fit=crop`,
-        `https://images.unsplash.com/photo-1519389950473-47ba0277781c?w=400&h=300&fit=crop`,
-        `https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=400&h=300&fit=crop`,
-      ];
-      images = real.map(url=>({url, query:q}));
-    }
-    
-    cont.innerHTML = images.map(img=>`<div class="group relative rounded-xl overflow-hidden aspect-[4/3] bg-white/5 border border-white/10 cursor-pointer hover:border-[#6C5CFF]/50" onclick="insertImage('${img.url}')">
-      <img src="${img.url}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
-      <div class="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition"></div>
-      <div class="absolute bottom-1 left-1 right-1 text-[10px] text-white opacity-0 group-hover:opacity-100 transition truncate">${img.query}</div>
-    </div>`).join('');
-  }catch(e){
-    cont.innerHTML = `<div class="col-span-3 text-[12px] text-red-400">${e.message}</div>`;
+  cont.innerHTML = '<div class="col-span-3 text-center py-4 text-[12px] text-white/40">Ищу настоящие фото…</div>';
+  try {
+    var items = await Photos.search(q, 9);
+    if (!items.length) { cont.innerHTML = '<div class="col-span-3 text-[12px] text-white/50">Ничего не нашлось. Попробуйте по-английски: coffee shop interior</div>'; return; }
+    cont.innerHTML = items.map(function (img) {
+      return '<div class="group relative rounded-xl overflow-hidden aspect-[4/3] bg-white/5 border border-white/10 cursor-pointer hover:border-[#6C5CFF]/50" onclick="insertImage(\'' + img.url + '\')">' +
+        '<img src="' + esc(img.thumb || img.url) + '" loading="lazy" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">' +
+        '<div class="absolute bottom-0 left-0 right-0 p-1 text-[9px] text-white bg-black/60 opacity-0 group-hover:opacity-100 transition truncate">' + esc(img.title || q) + '</div></div>';
+    }).join('');
+    state.photos = items.concat(state.photos || []);
+  } catch (e) {
+    cont.innerHTML = '<div class="col-span-3 text-[12px] text-red-400">' + esc(e.message) + '</div>';
   }
 }
-
-function insertImage(url){
-  if(!currentHtml) return toast('Сначала сгенерируй сайт', '⚠️');
-  quickChat(`Замени одну из картинок на ${url} — подбери подходящее место`);
-  toast('Отправляю в чат...', '🖼');
+function insertImage(url) {
+  if (!state.html) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  quickChat('Замени неудачное фото из блока на это: ' + url + '. Вставь его в подходящее по смыслу место, размеры сохрани.');
+  toast('Отправил в чат — сайт обновится', '🖼');
 }
-
-async function generateImage(){
-  const prompt = document.getElementById('imagePrompt').value.trim();
-  if(!prompt) return toast('Опиши что сгенерить', '⚠️');
-  
-  const apiKey = getKey();
-  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
-  
-  toast('Генерю картинку... 10-20 сек', '🎨');
-  
-  try{
-    // Try backend
-    let result;
-    try{
-      const res = await fetch('/api/generate-image', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({prompt, api_key: apiKey})});
-      if(res.ok) result = await res.json();
-    }catch{}
-    
-    if(!result || result.fallback){
-      // Direct
-      const resp = await fetch('https://polza.ai/api/v1/images/generations', {
-        method:'POST',
-        headers:{'Content-Type':'application/json','Authorization':`Bearer ${apiKey}`},
-        body: JSON.stringify({model:'bytedance/seedream-4.5', prompt, size:'1024x1024', n:1})
-      });
-      if(!resp.ok) throw new Error('Image gen failed, попробуй другую модель');
-      result = await resp.json();
-      result.url = result.data?.[0]?.url;
-    }
-    
-    if(result.url){
-      const cont = document.getElementById('imageResults');
-      cont.classList.remove('hidden');
-      cont.innerHTML = `<div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/30">
-        <img src="${result.url}" class="w-full aspect-square object-cover">
-        <div class="p-2 flex gap-2">
-          <button onclick="insertImage('${result.url}')" class="flex-1 btn-primary py-1.5 rounded-lg text-[11px] text-white">Вставить в сайт</button>
-          <a href="${result.url}" target="_blank" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px]">Открыть</a>
-        </div>
-      </div>` + cont.innerHTML;
-      toast('Картинка готова!', '✦');
-    }
-  }catch(e){
-    toast(e.message, '❌');
-  }
-}
-
-// ---------- Utils ----------
-function randomize(){
-  const niches = ["IT / SaaS / Стартап","Ресторан / Кафе","Клиника / Медицина","Фитнес / Спорт","Недвижимость","Образование / Курсы","Красота / Салон","Креатив / Агентство"];
-  const styles = ["modern premium like Linear/Stripe","glassmorphism + gradients","minimalism + typography","luxury dark + gold","cyberpunk neon","corporate trust blue"];
-  const prompts = [
-    "Лендинг для AI-агентства которое делает чат-ботов, темный премиум, как Linear, с градиентами, анимациями, тарифами",
-    "Сайт кофейни specialty, уютный, теплый, много фото, меню, история, адрес с картой",
-    "Клиника косметологии, светлый, премиум, доверие, услуги, врачи, до/после, отзывы",
-    "Фитнес-клуб, темный, мощный, брутальный, тарифы, тренеры, расписание",
-    "Агентство недвижимости, корпоративный, синий, каталог квартир, преимущества, отзывы"
-  ];
-  document.getElementById('businessType').value = niches[Math.floor(Math.random()*niches.length)];
-  document.getElementById('styleSelect').value = styles[Math.floor(Math.random()*styles.length)];
-  document.getElementById('mainPrompt').value = prompts[Math.floor(Math.random()*prompts.length)];
-  document.getElementById('siteName').value = ['Lumen','Aurora','Nova','Pulse','Velo','Astra','Flux'][Math.floor(Math.random()*7)] + ' Studio';
-  toast('Рандомайзер 🎲', '✦');
-}
-function clearAll(){
-  document.querySelectorAll('input, textarea').forEach(i=>{ if(i.id!=='polzaKey' && i.id!=='polzaKeyMobile') i.value=''; });
-  toast('Очищено', '↺');
-}
-function loadExample(){
-  document.getElementById('siteName').value = 'Lumen AI Studio';
-  document.getElementById('businessType').value = 'IT / SaaS / Стартап';
-  document.getElementById('siteType').value = 'saas';
-  document.getElementById('styleSelect').value = 'modern premium like Linear/Stripe';
-  document.getElementById('colorInput').value = '#6C5CFF,#00D9FF';
-  document.getElementById('mainPrompt').value = 'Современный SaaS лендинг для AI-студии которая делает сайты за 30 секунд. Темный премиум дизайн как Linear, Stripe, Vercel. Hero с анимированным градиентом и мокапом, 6 фич с иконками, секция как это работает (3 шага), тарифы (3 плана), отзывы с фото, FAQ, финальный CTA. Хочу glassmorphism, GSAP анимации при скролле, floating элементы, вау-эффект.';
-  document.getElementById('contactPhone').value = '+7 999 123-45-67';
-  document.getElementById('contactEmail').value = 'hello@lumen.studio';
-  document.getElementById('ctaText').value = 'Создать сайт за 30 сек';
-  toast('Пример загружен', '📄');
-}
-function renderHistory(){
-  const el = document.getElementById('historyList');
-  if(!history.length){ el.innerHTML = '<div class="text-[11px] text-white/30">Пока пусто</div>'; return; }
-  el.innerHTML = history.map((h,i)=>`<div class="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 cursor-pointer" onclick="document.getElementById('siteName').value='${h.name}'; document.getElementById('mainPrompt').value='${h.prompt}'">
-    <div><div class="text-[12px] font-medium truncate max-w-[150px]">${h.name}</div><div class="text-[10px] text-white/40 truncate max-w-[150px]">${h.prompt}</div></div>
-    <div class="text-[10px] font-mono text-white/30">${h.time}</div>
-  </div>`).join('');
-}
-renderHistory();
-
-// Load saved key
-const savedKey = localStorage.getItem('polza_key');
-if(savedKey){
-  document.getElementById('polzaKey').value = savedKey;
-  const m = document.getElementById('polzaKeyMobile');
-  if(m) m.value = savedKey;
-  const modal = document.getElementById('keyModalInput');
-  if(modal) modal.value = savedKey;
-}
-updateKeyUI();
-
-// Keyboard shortcut
-document.addEventListener('keydown', (e)=>{
-  if((e.metaKey || e.ctrlKey) && e.key==='Enter'){
-    e.preventDefault();
-    generateSite();
-  }
-});
-
-// Init - check key
-setTimeout(checkKeyOnStart, 800);
-
-// Sync key inputs
-['polzaKey','polzaKeyMobile','keyModalInput'].forEach(id=>{
-  const el = document.getElementById(id);
-  if(el){
-    el.addEventListener('input', ()=>{
-      const v = el.value.trim();
-      if(v){
-        document.getElementById('polzaKey').value = v;
-        const m = document.getElementById('polzaKeyMobile');
-        if(m) m.value = v;
-        const modal = document.getElementById('keyModalInput');
-        if(modal) modal.value = v;
-        localStorage.setItem('polza_key', v);
-        updateKeyUI();
-      }
+async function generateImage(promptId, resultsId) {
+  promptId = promptId || 'imagePrompt'; resultsId = resultsId || 'imageResults1';
+  var p = ($(promptId) && $(promptId).value.trim()) || '';
+  if (!p) { toast('Опиши картинку', '⚠️'); return; }
+  var cont = $(resultsId);
+  if (cont) { cont.classList.remove('hidden'); cont.innerHTML = '<div class="col-span-3 text-center py-4 text-[12px] text-white/40">Рисую… 10-40 секунд</div>'; }
+  try {
+    var r = await polzaImage({
+      model: state.imageModel, prompt: p,
+      onTick: function (status, sec) { if (cont) cont.innerHTML = '<div class="col-span-3 text-center py-4 text-[12px] text-white/40">Статус: ' + status + ' (' + sec + ' сек)</div>'; }
     });
-  }
-});
-
-// ---------- Voice Input (Голосовой ввод) ----------
-let currentSpeechRec = null;
-function startVoiceInput(inputId, btnId){
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if(!SpeechRecognition){
-    return toast('Голосовой ввод не поддерживается браузером. Используйте Chrome или Safari.', '⚠️');
-  }
-
-  const btn = document.getElementById(btnId);
-  const input = document.getElementById(inputId);
-  if(!btn || !input) return;
-
-  if(btn.dataset.recording === 'true'){
-    if(currentSpeechRec) { try{ currentSpeechRec.stop(); }catch(e){} }
-    btn.dataset.recording = 'false';
-    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    toast('Запись остановлена', '⏹');
-    return;
-  }
-
-  try{
-    const recognition = new SpeechRecognition();
-    recognition.lang = 'ru-RU';
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => {
-      btn.dataset.recording = 'true';
-      btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse');
-      toast('Слушаю вас... Говорите', '🎙️');
-    };
-
-    recognition.onresult = (event) => {
-      const text = event.results[0][0].transcript;
-      if(text){
-        input.value = input.value ? (input.value + ' ' + text) : text;
-        toast('Распознано!', '✓');
-      }
-    };
-
-    recognition.onerror = (e) => {
-      console.log('Speech error', e);
-      toast('Не удалось распознать голос', '⚠️');
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    recognition.onend = () => {
-      btn.dataset.recording = 'false';
-      btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
-    };
-
-    currentSpeechRec = recognition;
-    recognition.start();
-  }catch(e){
-    toast('Ошибка микрофона: ' + e.message, '⚠️');
-  }
+    if (cont) cont.innerHTML = '<div class="col-span-3 rounded-xl overflow-hidden border border-[#6C5CFF]/30">' +
+      '<img src="' + esc(r.url) + '" class="w-full aspect-square object-cover">' +
+      '<div class="p-2 flex gap-2"><button onclick="insertImage(\'' + r.url + '\')" class="flex-1 btn-primary py-1.5 rounded-lg text-[11px] text-white">Вставить в сайт</button>' +
+      '<a href="' + esc(r.url) + '" target="_blank" class="btn-ghost px-3 py-1.5 rounded-lg text-[11px]">Открыть</a></div></div>' + (cont.innerHTML || '');
+    toast('Картинка готова' + (r.cost ? ' (' + fmtRub(r.cost) + ')' : ''), '✦');
+    state.photos = [{ url: r.url, title: p, source: 'ai', query: p }].concat(state.photos || []);
+  } catch (e) { toast('Не получилось: ' + e.message, '❌'); }
 }
-
-// ---------- Photoshop & Media Tools ----------
-let currentUserPhotoBase64 = null;
-
-function switchImgTool(tool){
-  ['photoshop', 'generate', 'search'].forEach(t => {
-    const panel = document.getElementById('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
-    const tab = document.getElementById('toolTab' + (t==='generate'?'Gen':t.charAt(0).toUpperCase() + t.slice(1)));
-    if(panel) panel.classList.toggle('hidden', t !== tool);
-    if(tab){
-      if(t === tool){
-        tab.className = 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition';
-      } else {
-        tab.className = 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
-      }
-    }
+function switchImgTool(tool) {
+  ['photoshop', 'generate', 'search'].forEach(function (t) {
+    var panel = $('toolPanel' + t.charAt(0).toUpperCase() + t.slice(1));
+    var tab = $('toolTab' + (t === 'generate' ? 'Gen' : t.charAt(0).toUpperCase() + t.slice(1)));
+    if (panel) panel.classList.toggle('hidden', t !== tool);
+    if (tab) tab.className = t === tool ? 'px-2.5 py-1 rounded-md bg-[#6C5CFF] text-white font-bold transition' : 'px-2.5 py-1 rounded-md text-white/60 hover:text-white transition';
   });
 }
-
-function handleUserPhotoSelected(event){
-  const file = event.target.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    currentUserPhotoBase64 = e.target.result;
-    document.getElementById('photoshopThumb').src = currentUserPhotoBase64;
-    document.getElementById('photoshopFileName').textContent = file.name;
-    document.getElementById('photoshopUploadPrompt').classList.add('hidden');
-    document.getElementById('photoshopPreviewWrap').classList.remove('hidden');
-    toast('Фото загружено!', '✓');
+function handleUserPhotoSelected(event) {
+  var file = event.target.files[0]; if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function (e) {
+    window.__userPhoto = e.target.result;
+    if ($('photoshopThumb')) $('photoshopThumb').src = window.__userPhoto;
+    if ($('photoshopFileName')) $('photoshopFileName').textContent = file.name;
+    if ($('photoshopUploadPrompt')) $('photoshopUploadPrompt').classList.add('hidden');
+    if ($('photoshopPreviewWrap')) $('photoshopPreviewWrap').classList.remove('hidden');
+    toast('Фото загружено', '✓');
   };
   reader.readAsDataURL(file);
 }
-
-async function applyAiPhotoshop(){
-  if(!currentUserPhotoBase64){
-    return toast('Сначала загрузите фотографию!', '⚠️');
-  }
-  const prompt = document.getElementById('photoshopPrompt').value.trim();
-  if(!prompt){
-    return toast('Напишите, что изменить на фото', '⚠️');
-  }
-  const apiKey = getKey();
-  if(!apiKey) return toast('Нужен Polza API ключ', '⚠️');
-
-  const btn = document.getElementById('aiPhotoshopBtn');
-  btn.disabled = true;
-  btn.innerHTML = '⏳ Обработка...';
-  toast('Нейросеть обрабатывает ваше фото... 🪄', '🎨');
-
+async function applyAiPhotoshop() {
+  if (!window.__userPhoto) { toast('Сначала загрузите фотографию', '⚠️'); return; }
+  var prompt = ($('photoshopPrompt') && $('photoshopPrompt').value.trim()) || '';
+  if (!prompt) { toast('Напишите, что изменить на фото', '⚠️'); return; }
+  var btn = $('aiPhotoshopBtn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '⏳ Обработка…'; }
+  toast('Нейросеть обрабатывает фото…', '🎨');
   try {
-    const fullPrompt = 'Professional web design photo editing: ' + prompt;
-    const base64Data = currentUserPhotoBase64.includes(',') ? currentUserPhotoBase64.split(',')[1] : currentUserPhotoBase64;
-    
-    const resp = await fetch('https://polza.ai/api/v1/media', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image',
-        input: {
-          prompt: fullPrompt,
-          images: [{ type: 'base64', data: base64Data }]
-        }
-      })
+    var r = await polzaEditImage({
+      model: state.imageModel, dataUrl: window.__userPhoto,
+      prompt: 'Professional photo editing for a website: ' + prompt,
+      onTick: function (status, sec) { if (btn) btn.innerHTML = '⏳ ' + status + ' ' + sec + 'с'; }
     });
+    if (r.url) { insertImage(r.url); toast('Фото готово и отправлено в сайт' + (r.cost ? ' (' + fmtRub(r.cost) + ')' : ''), '🪄'); }
+  } catch (e) { toast('Ошибка фотошопа: ' + e.message, '⚠️'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = '🪄 Изменить'; } }
+}
 
-    if(!resp.ok){
-      const err = await resp.text();
-      throw new Error(`Ошибка Polza Media: ${err.slice(0, 150)}`);
-    }
-
-    const data = await resp.json();
-    let resultUrl = data.url || (data.data && data.data[0] && data.data[0].url);
-    const mediaId = data.id || data.request_id || data.requestId;
-
-    if(!resultUrl && mediaId){
-      for(let i = 0; i < 20; i++){
-        await new Promise(r => setTimeout(r, 2000));
-        const st = await fetch(`https://polza.ai/api/v1/media/${mediaId}`, {
-          headers: { 'Authorization': `Bearer ${apiKey}` }
-        });
-        if(st.ok){
-          const sj = await st.json();
-          if(sj.status === 'completed' || sj.status === 'succeeded'){
-            resultUrl = sj.url || (sj.output && sj.output.url) || (sj.data && sj.data[0] && sj.data[0].url);
-            break;
-          }
-        }
-      }
-    }
-
-    if(resultUrl){
-      insertImage(resultUrl);
-      toast('Фото изменено и вставлено на сайт! ✨', '🪄');
-    } else {
-      toast('Готово! Изображение обработано', '✓');
-    }
-  } catch(e) {
-    toast('Ошибка фотошопа: ' + e.message, '⚠️');
-  } finally {
-    btn.disabled = false;
-    btn.innerHTML = '🪄 Изменить';
+/* ------------------------- ГОЛОС ------------------------- */
+function startVoiceInput(inputId, btnId) {
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var btn = $(btnId), input = $(inputId);
+  if (!SR) { toast('Голосовой ввод не поддерживается браузером', '⚠️'); return; }
+  if (!btn || !input) return;
+  if (btn.dataset.recording === 'true') {
+    if (window.__speechRec) { try { window.__speechRec.stop(); } catch (e) { } }
+    btn.dataset.recording = 'false';
+    btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse');
+    return;
   }
+  try {
+    var rec = new SR();
+    rec.lang = 'ru-RU'; rec.continuous = false; rec.interimResults = false;
+    rec.onstart = function () { btn.dataset.recording = 'true'; btn.classList.add('bg-red-500/30', 'text-red-400', 'animate-pulse'); toast('Слушаю вас…', '🎙️'); };
+    rec.onresult = function (e) {
+      var text = e.results[0][0].transcript;
+      if (text) { input.value = input.value ? input.value + ' ' + text : text; toast('Распознано', '✓'); }
+    };
+    rec.onerror = function () { toast('Не удалось распознать голос', '⚠️'); btn.dataset.recording = 'false'; btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse'); };
+    rec.onend = function () { btn.dataset.recording = 'false'; btn.classList.remove('bg-red-500/30', 'text-red-400', 'animate-pulse'); };
+    window.__speechRec = rec;
+    rec.start();
+  } catch (e) { toast('Ошибка микрофона: ' + e.message, '⚠️'); }
 }
 
-// ---------- Owner Unlimited Authentication ----------
-function checkOwnerAuth(){
-  const isOwner = localStorage.getItem('neurasite_owner') === 'true';
-  const badge = document.getElementById('ownerStatusBadge');
-  const tariffsBtn = document.getElementById('tariffsHeaderBtn');
-  if(badge) badge.classList.toggle('hidden', !isOwner);
-  if(tariffsBtn && isOwner) tariffsBtn.classList.add('hidden');
+/* ------------------------- КЛЮЧ, ВЛАДЕЛЕЦ, ТАРИФЫ ------------------------- */
+function toggleKey() {
+  ['polzaKey', 'polzaKeyMobile'].forEach(function (id) {
+    var i = $(id); if (i) i.type = i.type === 'password' ? 'text' : 'password';
+  });
 }
-
-function verifyOwnerPassword(pass){
-  if(pass === '2323gena' || pass === '2323гена' || pass === '2323'){
-    localStorage.setItem('neurasite_owner', 'true');
+function saveKey() { saveKeyValue(getKey()); }
+function saveKeyFromModal() {
+  var k = ($('keyModalInput') && $('keyModalInput').value) || '';
+  if (saveKeyValue(k)) { var m = $('keyModal'); if (m) m.classList.add('hidden'); }
+}
+function savePhotoKeys() {
+  var pairs = [['unsplashKeyInput', 'ns_unsplash_key_v2'], ['pexelsKeyInput', 'ns_pexels_key_v2'], ['pixabayKeyInput', 'ns_pixabay_key_v2']];
+  var saved = [];
+  pairs.forEach(function (pr) {
+    var el = $(pr[0]); if (!el) return;
+    var v = (el.value || '').trim();
+    if (v) { lsSet(pr[1], v); saved.push(pr[0].replace('KeyInput', '')); }
+  });
+  photoKeysState();
+  toast(saved.length ? 'Ключи сохранены: ' + saved.join(', ') : 'Ключи можно оставить пустыми — поиск фото работает и без них', saved.length ? '📷' : '💡');
+}
+function photoKeysState() {
+  var el = $('photoKeysState'); if (!el) return;
+  var have = [['unsplashKeyInput', 'ns_unsplash_key_v2'], ['pexelsKeyInput', 'ns_pexels_key_v2'], ['pixabayKeyInput', 'ns_pixabay_key_v2']];
+  var names = have.filter(function (pr) { return (lsGet(pr[1], '') || '').trim(); }).map(function (pr) { return pr[0].replace('KeyInput', ''); });
+  el.textContent = names.length ? 'подключено: ' + names.join(', ') : 'ключи не заданы — работают бесплатные источники';
+  have.forEach(function (pr) { var i = $(pr[0]); if (i && !i.value) i.value = lsGet(pr[1], ''); });
+}
+function openPricingModal() { var m = $('pricingModal'); if (m) m.classList.remove('hidden'); }
+function checkOwnerAuth() {
+  var isOwner = lsGet(CONFIG.LS_OWNER, '') === 'true';
+  var badge = $('ownerStatusBadge'); if (badge) badge.classList.toggle('hidden', !isOwner);
+  var tariffs = $('tariffsHeaderBtn'); if (tariffs) tariffs.style.display = isOwner ? 'none' : '';
+  var pin = $('ownerPinInput'); if (pin) pin.value = '';
+}
+function verifyOwnerPassword(pass) {
+  if (CONFIG.OWNER_PINS.indexOf(String(pass || '').trim()) >= 0) {
+    lsSet(CONFIG.LS_OWNER, 'true');
     checkOwnerAuth();
-    toast('Режим владельца активирован: Безлимит! 👑', '👑');
-    document.getElementById('ownerPinModal')?.classList.add('hidden');
+    var m = $('ownerPinModal'); if (m) m.classList.add('hidden');
+    toast('Режим владельца включён: без лимитов', '👑');
     return true;
   }
   return false;
 }
+function tryOwnerPin() {
+  var pin = ($('ownerPinInput') && $('ownerPinInput').value) || '';
+  if (!verifyOwnerPassword(pin)) {
+    toast('Неверный PIN', '⚠️');
+    var i = document.querySelector('#ownerPinModal input'); if (i) { i.style.outline = '2px solid #e5484d'; setTimeout(function () { i.style.outline = ''; }, 1200); }
+  }
+}
+async function refreshBalance() {
+  try {
+    var b = await polzaBalance();
+    state.balance = b.available;
+    var el = $('balancePill');
+    if (el) { el.textContent = 'Баланс ' + fmtRub(b.available); el.classList.remove('hidden'); }
+  } catch (e) { }
+}
+async function checkKeyOnStart() {
+  updateKeyUI();
+  refreshBalance();
+  try {
+    var list = await polzaModels();
+    window.__modelsCache = { at: Date.now(), data: list };
+  } catch (e) { }
+  renderModels();
+  if (!getKey() && !isProxied()) { var m = $('keyModal'); if (m) m.classList.remove('hidden'); }
+}
 
-window.addEventListener('DOMContentLoaded', () => {
+/* ------------------------- ПРОЧЕЕ ------------------------- */
+var genHistory = lsJson(CONFIG.LS_HISTORY, '[]');
+function setPrompt(t) { if ($('mainPrompt')) $('mainPrompt').value = t; }
+function setColors(c) { if ($('colorInput')) $('colorInput').value = c; }
+function randomize() {
+  var niches = ['IT / SaaS / Стартап', 'Ресторан / Кафе', 'Клиника / Медицина', 'Фитнес / Спорт', 'Недвижимость', 'Образование / Курсы', 'Красота / Салон', 'Креатив / Агентство / Дизайн'];
+  var styles = ['modern premium like Linear/Stripe', 'glassmorphism + gradients', 'minimalism + typography', 'luxury dark + gold', 'corporate trust blue'];
+  var prompts = [
+    'Лендинг для AI-агентства: тёмный премиум как Linear, градиенты, анимации, тарифы, кейсы',
+    'Сайт speciality-кофейни: уютный, тёплый, много фото, меню, история, карта',
+    'Клиника косметологии: светлый премиум, доверие, услуги, врачи, до/после, отзывы',
+    'Фитнес-клуб: тёмный мощный дизайн, тарифы, тренеры, расписание, отзывы',
+    'Агентство недвижимости: корпоративный синий, каталог квартир, преимущества, отзывы'
+  ];
+  if ($('businessType')) $('businessType').value = niches[Math.floor(Math.random() * niches.length)];
+  if ($('styleSelect')) $('styleSelect').value = styles[Math.floor(Math.random() * styles.length)];
+  if ($('mainPrompt')) $('mainPrompt').value = prompts[Math.floor(Math.random() * prompts.length)];
+  if ($('siteName')) $('siteName').value = ['Lumen', 'Aurora', 'Nova', 'Pulse', 'Velo', 'Astra', 'Flux'][Math.floor(Math.random() * 7)] + ' Studio';
+  toast('Рандомайзер', '🎲');
+}
+function clearAll() {
+  $$('input, textarea').forEach(function (i) {
+    if (['polzaKey', 'polzaKeyMobile'].indexOf(i.id) >= 0) return;
+    if (i.type === 'radio' || i.type === 'checkbox') return;
+    i.value = '';
+  });
+  toast('Поля очищены', '↺');
+}
+function loadExample() {
+  if ($('siteName')) $('siteName').value = 'Lumen AI Studio';
+  if ($('businessType')) $('businessType').value = 'IT / SaaS / Стартап';
+  if ($('siteType')) $('siteType').value = 'landing';
+  togglePagesBlock();
+  if ($('styleSelect')) $('styleSelect').value = 'modern premium like Linear/Stripe';
+  if ($('colorInput')) $('colorInput').value = '#6C5CFF, #00D9FF';
+  if ($('mainPrompt')) $('mainPrompt').value = 'Современный SaaS-лендинг для AI-студии, которая делает сайты за 30 секунд. Тёмный премиум как Linear и Vercel. Hero с анимированным градиентом и мокапом интерфейса, 6 преимуществ с иконками, «как это работает» в 3 шага, тарифы, отзывы с фото, FAQ, финальный CTA. Glassmorphism, анимации при скролле, вау-эффект.';
+  if ($('contactPhone')) $('contactPhone').value = '+7 999 123-45-67';
+  if ($('contactEmail')) $('contactEmail').value = 'hello@lumen.studio';
+  if ($('ctaText')) $('ctaText').value = 'Создать сайт за 30 секунд';
+  toast('Пример загружен', '📄');
+}
+function renderHistory() {
+  var el = $('historyList'); if (!el) return;
+  if (!genHistory.length) { el.innerHTML = '<div class="text-[11px] text-white/30">Пока пусто</div>'; return; }
+  el.innerHTML = genHistory.map(function (h) {
+    return '<div class="flex items-center justify-between p-2 rounded-lg bg-white/5 border border-white/5 hover:bg-white/10 cursor-pointer" onclick="restoreHistory(' + JSON.stringify(esc(h.name)) + ',' + JSON.stringify(esc(h.prompt)) + ')">' +
+      '<div><div class="text-[12px] font-medium truncate max-w-[150px]">' + esc(h.name) + '</div>' +
+      '<div class="text-[10px] text-white/40 truncate max-w-[150px]">' + esc(h.prompt) + (h.multi ? ' · ' + (h.pages || 1) + ' стр.' : '') + '</div></div>' +
+      '<div class="text-[10px] font-mono text-white/30">' + esc(h.time) + '</div></div>';
+  }).join('');
+}
+function restoreHistory(name, prompt) {
+  if ($('siteName')) $('siteName').value = name;
+  if ($('mainPrompt')) $('mainPrompt').value = prompt;
+  toast('Параметры из истории подставлены', '↺');
+}
+
+/* ------------------------- САМОПРОВЕРКА ------------------------- */
+async function runSelfTest(realMode) {
+  var checks = [];
+  function add(ok, label, detail) { checks.push({ ok: !!ok, label: label, detail: detail || '' }); }
+
+  // 1. функции из разметки
+  var missing = [];
+  var re = /on(?:click|input|change|submit)="([A-Za-z_$][\w$]*)\(/g, m, seen = {};
+  var markup = document.body.innerHTML;
+  while ((m = re.exec(markup))) {
+    var fn = m[1];
+    if (seen[fn]) continue; seen[fn] = 1;
+    if (typeof window[fn] !== 'function') missing.push(fn);
+  }
+  add(missing.length === 0, 'Все кнопки привязаны к функциям', missing.length ? 'не найдены: ' + missing.join(', ') : 'проверено ' + Object.keys(seen).length + ' обработчиков');
+
+  // 2. обязательные элементы
+  var required = ['generateBtn', 'mainPrompt', 'previewFrame', 'chatInput', 'chatMessages', 'toast', 'pricingModal', 'ownerPinModal', 'testModal'];
+  var absent = required.filter(function (id) { return !$(id); });
+  add(absent.length === 0, 'Все элементы интерфейса на месте', absent.length ? 'нет: ' + absent.join(', ') : '');
+
+  // 3. дубли id
+  var dups = [], idmap = {};
+  $$('[id]').forEach(function (el) { if (idmap[el.id]) dups.push(el.id); idmap[el.id] = 1; });
+  add(dups.length === 0, 'Нет дублирующихся id', dups.length ? 'дубли: ' + dups.slice(0, 5).join(', ') : '');
+
+  // 4. скрипты не падают
+  add(!window.__nsJsError, 'JavaScript без ошибок', window.__nsJsError ? String(window.__nsJsError).slice(0, 120) : '');
+
+  // 5. ключ и модели
+  var hasKey = !!getKey() || isProxied();
+  add(true, 'Ключ Polza', isProxied() ? 'хранится на сервере, посетителям не виден'
+    : (hasKey ? (isOwnKey() ? 'используется ваш ключ (только в вашем браузере)' : 'используется ключ из конфига сайта') : 'пока не задан — вставьте свой в окне «🔑 ключ»'));
+  if (hasKey) {
+    try {
+      var b = await polzaBalance();
+      add(true, 'Баланс доступен', fmtRub(b.available));
+    } catch (e) { add(false, 'Баланс недоступен', e.message); }
+  } else {
+    add(true, 'Баланс', 'проверим, когда будет указан ключ');
+  }
+  try {
+    var list = await polzaModels();
+    add(list.length > 100, 'Каталог моделей', list.length + ' моделей');
+  } catch (e) { add(false, 'Каталог моделей', e.message); }
+
+  // 6. фото-поиск
+  try {
+    var photos = await Photos.search('business team office', 3);
+    add(photos.length > 0, 'Поиск фотографий работает', 'нашлось: ' + photos.length);
+  } catch (e) { add(false, 'Поиск фотографий', e.message); }
+
+  // 7. сгенерированный сайт
+  if (state.html) {
+    var report = await validateSite(state.html, { photos: state.photos, form: getFormData() });
+    var bad = report.filter(function (c) { return !c.ok; });
+    add(bad.length === 0, 'Проверки сгенерированного сайта', bad.length ? bad.map(function (x) { return x.label; }).join('; ') : report.length + ' проверок пройдено');
+  } else {
+    add(true, 'Сгенерированный сайт', 'сайт пока не генерировали');
+  }
+
+  // 8. ZIP-сборка
+  try {
+    var blob = Zip.create([{ name: 'test.txt', content: 'hello' }]);
+    add(blob.size > 0, 'Экспорт в ZIP работает', blob.size + ' байт');
+  } catch (e) { add(false, 'Экспорт в ZIP', e.message); }
+
+  // 9. реальная генерация (по запросу)
+  if (realMode) {
+    try {
+      var res = await polzaChat({ model: 'deepseek/deepseek-v3.2', messages: [{ role: 'user', content: 'Ответь одним словом: работает' }], maxTokens: 10, stream: false });
+      add(!!res.text, 'Реальный запрос к модели', res.text.slice(0, 40) + ' (' + fmtRub((res.usage && res.usage.cost_rub) || 0) + ')');
+    } catch (e) { add(false, 'Реальный запрос к модели', e.message); }
+  }
+
+  var html = checks.map(function (c) {
+    return '<div class="flex items-start gap-2"><span>' + (c.ok ? '✅' : '❌') + '</span><div><div>' + esc(c.label) + '</div>' +
+      (c.detail ? '<div class="text-[11px] text-white/50">' + esc(c.detail) + '</div>' : '') + '</div></div>';
+  }).join('');
+  var okCount = checks.filter(function (c) { return c.ok; }).length;
+  html = '<div class="mb-2 text-[13px] font-bold ' + (okCount === checks.length ? 'text-[#00D492]' : 'text-[#FFE17B]') + '">' +
+    okCount + ' из ' + checks.length + ' проверок пройдено</div>' + html;
+
+  if ($('testReport')) $('testReport').innerHTML = html;
+  if ($('testModal')) $('testModal').classList.remove('hidden');
+  window.__nsLastReport = checks;
+  return checks;
+}
+
+/* ------------------------- СТАРТ ------------------------- */
+window.addEventListener('error', function (e) { window.__nsJsError = (e && e.message) || 'unknown'; });
+
+document.addEventListener('DOMContentLoaded', function () {
+  applyModelToSelects(getModel());
+  renderModels();
+  renderHistory();
+  updateKeyUI();
   checkOwnerAuth();
+  togglePagesBlock();
+  photoKeysState();
+  if ($('siteType')) $('siteType').addEventListener('change', togglePagesBlock);
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.type === 'ns-goto' && e.data.file) showPreviewFile(e.data.file);
+  });
+  window.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); generateSite(); }
+  });
+  setTimeout(async function () {
+    var info = await detectProxy();
+    if (info) {
+      var pill = $('keyPill');
+      if (pill) { pill.textContent = '🛡 сервер (ключ скрыт)'; pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#00D9FF]/15 border-[#00D9FF]/40 text-[#00D9FF]'; }
+      toast('Работаю через сервер: ключ скрыт от посетителей', '🛡');
+    }
+    checkKeyOnStart();
+  }, 300);
+  loadSharedSite();
 });
 
 </script>

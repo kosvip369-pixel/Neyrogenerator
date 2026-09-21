@@ -1,10 +1,10 @@
 # Примеры сайтов сгенерированных NeuraSite AI
 
-Эти сайты были сгенерированы генератором за 30 секунд каждый на модели `anthropic/claude-sonnet-4-5` через Polza AI.
+Эти сайты были сгенерированы генератором за 30 секунд каждый на модели `anthropic/claude-sonnet-4.5` через Polza AI.
 
 ## Как сгенерить свой?
 
-1. Открой https://kosvip369-pixel.github.io/neuralead-demo-bot/
+1. Открой https://kosvip369-pixel.github.io/Neyrogenerator/
 2. Вставь Polza API ключ
 3. Опиши сайт и нажми «Сгенерировать»
 

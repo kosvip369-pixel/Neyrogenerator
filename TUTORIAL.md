@@ -8,22 +8,22 @@
 2. Зарегистрируйся (почта + пароль)
 3. Пополни баланс на 100-300₽ (хватит на 10-20 сайтов)
 4. Создай API ключ: Dashboard → API Keys → Create
-5. Скопируй ключ `sk-polza-...`
+5. Скопируй ключ `pza_...`
 
 > **Почему Polza?** Это агрегатор №1 в РФ. Один ключ для 400+ моделей (OpenAI, Claude, Gemini, DeepSeek и т.д.), оплата в рублях, без VPN. Дешевле чем напрямую.
 
 ### Шаг 2: Открой генератор
 
 **Вариант A — GitHub Pages (проще всего):**
-- Открой https://kosvip369-pixel.github.io/neuralead-demo-bot/
+- Открой https://kosvip369-pixel.github.io/Neyrogenerator/
 - Вставь ключ в поле в шапке
 
 **Вариант B — Локально:**
 ```bash
-git clone https://github.com/kosvip369-pixel/neuralead-demo-bot.git
-cd neuralead-demo-bot
+git clone https://github.com/kosvip369-pixel/Neyrogenerator.git
+cd Neyrogenerator
 pip install -r requirements.txt
-export POLZA_API_KEY=sk-polza-...
+export POLZA_API_KEY=pza_...
 python generator_server.py
 # Открой http://localhost:8000
 ```
@@ -121,7 +121,7 @@ AI (Claude Haiku 4.5 — быстрый и дешевый) мгновенно п
 
 | Модель | Когда использовать |
 |--------|-------------------|
-| `anthropic/claude-sonnet-4-5` | **Всегда по умолчанию** — лучший для фронтенда, дизайн топ |
+| `anthropic/claude-sonnet-4.5` | **Всегда по умолчанию** — лучший для фронтенда, дизайн топ |
 | `openai/gpt-5` | Сложные SaaS, магазины, много логики |
 | `google/gemini-2.5-pro` | Креатив, блоги, 1M контекст |
 | `deepseek/deepseek-v3.2` | Быстро и дешево, лендинги |
@@ -213,7 +213,7 @@ AI (Claude Haiku 4.5 — быстрый и дешевый) мгновенно п
 1. Форкни репо
 2. Settings → Pages → Source: `Deploy from a branch` → Branch: `main` / `root` → Save
 3. Жди 1-2 минуты
-4. Открой `https://твой-ник.github.io/neuralead-demo-bot/`
+4. Открой `https://твой-ник.github.io/Neyrogenerator/`
 
 Готово! Генератор работает.
 
@@ -221,7 +221,7 @@ AI (Claude Haiku 4.5 — быстрый и дешевый) мгновенно п
 
 ## 📞 Поддержка
 
-- Issues: https://github.com/kosvip369-pixel/neuralead-demo-bot/issues
+- Issues: https://github.com/kosvip369-pixel/Neyrogenerator/issues
 - Polza AI: https://t.me/polzaai
 - Тел: +7 920 698-08-58
 

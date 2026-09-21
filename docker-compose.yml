@@ -1,12 +1,12 @@
-version: '3.8'
-
 services:
-  generator:
+  neuragen:
     build: .
     ports:
       - "8000:8000"
     environment:
-      - POLZA_API_KEY=${POLZA_API_KEY:-pza_iQoXA0YAYsdQbomqk6gV3c7menmhgKd4}
-      - POLZA_BASE_URL=https://polza.ai/api/v1
-      - PORT=8000
+      # Ключ задаётся здесь или в .env (docker compose подхватывает .env автоматически)
+      - POLZA_API_KEY=${POLZA_API_KEY}
+      - UNSPLASH_ACCESS_KEY=${UNSPLASH_ACCESS_KEY:-}
+      - PEXELS_API_KEY=${PEXELS_API_KEY:-}
+      - PIXABAY_API_KEY=${PIXABAY_API_KEY:-}
     restart: unless-stopped
