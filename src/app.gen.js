@@ -333,39 +333,60 @@ async function generateSitePages(opts) {
   // 2. Остальные страницы
   for (var i = 1; i < pages.length; i++) {
     onProgress('Страница ' + (i + 1) + ' из ' + pages.length + ': ' + pages[i] + '…');
-    var theme = (homeFixed.html.match(/<style[\s\S]*?<\/style>/i) || [''])[0].slice(0, 12000);
-    var pageForm = Object.assign({}, form, { pages: pages });
-    var text = [
-      'Ты делаешь ОТДЕЛЬНУЮ страницу «' + pages[i] + '» (файл ' + pageFile(pages[i]) + ') многостраничного сайта «' + (form.site_name || '') + '».',
-      'Дизайн-система, шрифты, палитра и компоненты — как на главной странице. Ниже её <style>: переиспользуй те же токены и классы.',
-      '',
-      'СТИЛЬ ГЛАВНОЙ СТРАНИЦЫ (используй те же токены/классы):',
-      theme,
-      '',
-      'ШАПКА ГЛАВНОЙ (повтори ровно такую же, только подставь правильные ссылки меню на файлы):',
-      headerHtml,
-      '',
-      'ПОДВАЛ ГЛАВНОЙ (повтори):',
-      footerHtml,
-      '',
-      'СОДЕРЖИМОЕ ЭТОЙ СТРАНИЦЫ: ' + pageHint(pages[i]),
-      'Пожелания клиента по всему сайту: ' + (form.prompt || '—'),
-      'Сфера: ' + (form.business_type || '') + '. Название: ' + (form.site_name || '') + '.',
-      '',
-      photoBlock(photos, form.photoMode),
-      '',
-      'Верни ТОЛЬКО этот файл целиком: <!DOCTYPE html> … </html>, без markdown и пояснений.',
-      'Ссылки в меню/футере — на файлы: index.html, ' + pages.slice(1).map(pageFile).join(', ') + '.'
-    ].join('\n');
-
-    var page = await generatePage({
-      form: pageForm, photos: photos, isMulti: true, model: model, userPromptText: text
-    });
+    var text = pagePromptText(form, pages, i, homeFixed.html, photos);
+    var page = await generatePage({ form: form, photos: photos, isMulti: true, model: model, userPromptText: text });
     var fixed = finishHtml(page.raw, { photos: photos, isMulti: true });
     files.push({ name: pageFile(pages[i]), content: fixed.html, usage: page.usage, finishReason: page.finishReason, truncated: page.truncated });
-    void pageForm;
   }
   return files;
+}
+
+/* Текст задания для отдельной страницы многостраничника (единый дизайн берётся с главной). */
+function pagePromptText(form, pages, index, homeHtml, photos) {
+  var doc = homeHtml ? new DOMParser().parseFromString(homeHtml, 'text/html') : null;
+  var theme = homeHtml ? (homeHtml.match(/<style[\s\S]*?<\/style>/i) || [''])[0].slice(0, 12000) : '';
+  var headerHtml = doc && doc.querySelector('header') ? doc.querySelector('header').outerHTML.slice(0, 6000) : '';
+  var footerHtml = doc && doc.querySelector('footer') ? doc.querySelector('footer').outerHTML.slice(0, 3000) : '';
+  var name = pages[index];
+  return [
+    'Ты делаешь ОТДЕЛЬНУЮ страницу «' + name + '» (файл ' + pageFile(name) + ') многостраничного сайта «' + (form.site_name || '') + '».',
+    'Дизайн-система, шрифты, палитра и компоненты — как на главной странице. Ниже её стили: переиспользуй те же токены и классы.',
+    '',
+    'СТИЛЬ ГЛАВНОЙ СТРАНИЦЫ:',
+    theme,
+    '',
+    'ШАПКА ГЛАВНОЙ (повтори ровно такую же, только ссылки меню должны вести на файлы страниц):',
+    headerHtml,
+    '',
+    'ПОДВАЛ ГЛАВНОЙ (повтори):',
+    footerHtml,
+    '',
+    'СОДЕРЖИМОЕ ЭТОЙ СТРАНИЦЫ: ' + pageHint(name),
+    'Пожелания клиента по всему сайту: ' + (form.prompt || '—'),
+    'Сфера: ' + (form.business_type || '') + '. Название: ' + (form.site_name || '') + '.',
+    '',
+    photoBlock(photos, form.photoMode),
+    '',
+    'Верни ТОЛЬКО этот файл целиком: <!DOCTYPE html> … </html>, без markdown и пояснений.',
+    'Ссылки в меню и футере — на файлы: ' + pages.map(pageFile).join(', ') + '.'
+  ].join('\n');
+}
+
+/* Перегенерация одной страницы готового сайта (кнопка в панели страниц). */
+async function regenerateOnePage(opts) {
+  var form = opts.form, index = opts.index, files = opts.files, photos = opts.photos;
+  var pages = form.pages && form.pages.length ? form.pages : files.map(function (f) { return f.name.replace(/\.html$/, ''); });
+  var name = pages[Math.min(index, pages.length - 1)] || 'Страница';
+  var homeHtml = (files[0] && files[0].content) || '';
+  var text;
+  if (index === 0) {
+    text = userPrompt(form, photos, pages.length > 1);
+  } else {
+    text = pagePromptText(form, pages, index, homeHtml, photos);
+  }
+  var page = await generatePage({ form: form, photos: photos, isMulti: pages.length > 1, model: opts.model, userPromptText: text });
+  var fixed = finishHtml(page.raw, { photos: photos, isMulti: pages.length > 1 });
+  return { name: files[index] ? files[index].name : pageFile(name), content: fixed.html, usage: page.usage, truncated: page.truncated };
 }
 
 /* Правки в чате: тот же дизайн-контракт + постобработка. */

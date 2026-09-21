@@ -8,6 +8,7 @@ var state = {
   files: [],          // многостраничник: [{name, content}]
   photos: [],
   generating: false,
+  currentFile: 'index.html',
   model: lsGet('ns_model_v2', CONFIG.DEFAULT_MODEL),
   imageModel: lsGet('ns_image_model_v2', 'google/gemini-2.5-flash-image'),
   balance: null,
@@ -203,7 +204,7 @@ async function generateSite() {
     genHistory = genHistory.slice(0, 12);
     lsSet(CONFIG.LS_HISTORY, JSON.stringify(history));
     renderHistory();
-    refreshBalance();
+    refreshBalance(true);
   } catch (e) {
     toast('Ошибка: ' + e.message, '❌');
     addChatMessage('assistant', 'Ошибка генерации: ' + e.message);
@@ -240,6 +241,7 @@ function inlineAssets(html, files) {
 function renderPreview(html, isMulti) {
   var frame = $('previewFrame');
   if (!frame) return;
+  if (!isMulti || !state.files || state.files.length < 2) state.currentFile = 'index.html';
   var placeholder = $('previewPlaceholder'); if (placeholder) placeholder.classList.add('hidden');
   frame.classList.remove('hidden');
   frame.srcdoc = html;
@@ -254,10 +256,12 @@ function renderPagesBar() {
   if (!state.files || state.files.length < 2) { bar.innerHTML = ''; bar.classList.add('hidden'); return; }
   bar.classList.remove('hidden');
   var current = state.html;
-  bar.innerHTML = '<span class="text-[11px] text-white/40 mr-1">Страницы:</span>' + state.files.map(function (f) {
-    var active = f.content === current;
+  bar.innerHTML = '<span class="text-[11px] text-white/40 mr-1">Страницы:</span>' + state.files.map(function (f, i) {
+    var active = f.name === state.currentFile || (!state.currentFile && (f.content === current || i === 0));
     return '<button onclick="showPreviewFile(\'' + f.name + '\')" class="px-2.5 py-1 rounded-lg text-[11px] ' + (active ? 'bg-[#6C5CFF] text-white font-bold' : 'btn-ghost') + '">' + esc(f.name.replace('.html', '')) + '</button>';
-  }).join('');
+  }).join('') +
+    '<span class="flex-1"></span>' +
+    '<button id="regenBtn" onclick="regenerateCurrentPage()" class="px-2.5 py-1 rounded-lg text-[11px] btn-ghost" title="Заново сделать только эту страницу">↻ Эту страницу</button>';
 }
 function ensurePagesBar() {
   var host = $('previewWrapper'); if (!host) return null;
@@ -270,8 +274,39 @@ function ensurePagesBar() {
 function showPreviewFile(name) {
   var f = (state.files || []).filter(function (x) { return x.name === name; })[0];
   if (!f) return;
+  state.currentFile = name;
   renderPreview(f.content, true);
   renderPagesBar();
+}
+/* Перегенерация одной страницы: не нужно переделывать весь сайт из-за одной неудачной страницы. */
+async function regenerateCurrentPage() {
+  if (!state.files || !state.files.length) { toast('Сначала сгенерируй сайт', '⚠️'); return; }
+  if (state.files.length < 2) { toast('Сайт из одной страницы — используйте «Сгенерировать сайт»', 'ℹ️'); return; }
+  if (state.generating) { toast('Дождись окончания генерации', '⏳'); return; }
+  var index = state.files.map(function (f) { return f.name; }).indexOf(state.currentFile);
+  if (index < 0) index = 0;
+  state.generating = true;
+  var btn = $('regenBtn'); if (btn) { btn.disabled = true; btn.textContent = '⏳ Генерирую…'; }
+  showLoading(true);
+  try {
+    var res = await regenerateOnePage({
+      form: getFormData(), index: index, files: state.files, photos: state.photos, model: getModel()
+    });
+    state.files[index] = { name: res.name, content: res.content };
+    state.html = res.content;
+    state.currentFile = res.name;
+    renderPreview(res.content, true);
+    renderPagesBar();
+    if ($('statCost')) $('statCost').textContent = res.usage && (res.usage.cost_rub || res.usage.cost) ? fmtRub(res.usage.cost_rub || res.usage.cost) : $('statCost').textContent;
+    toast('Страница «' + res.name + '» перегенерирована', '↻');
+    addChatMessage('assistant', 'Перегенерировал страницу ' + res.name + '. Посмотрите — если что-то не так, скажите, что поправить.');
+  } catch (e) {
+    toast('Не получилось: ' + e.message, '❌');
+  } finally {
+    state.generating = false;
+    showLoading(false);
+    if (btn) { btn.disabled = false; btn.textContent = '↻ Эту страницу'; }
+  }
 }
 function setDevice(type) {
   var wrapper = $('previewWrapper');
@@ -392,9 +427,19 @@ async function sendChat() {
   try {
     var res = await refineSite(state.html, msg, { photos: state.photos, form: getFormData() });
     var t = $('typing'); if (t) t.remove();
+    var multi = state.files && state.files.length > 1;
+    var index = state.files.map(function (f) { return f.name; }).indexOf(state.currentFile);
+    if (index < 0) index = 0;
     state.html = res.html;
-    state.files = [{ name: (state.files[0] && state.files[0].name) || 'index.html', content: res.html }];
-    renderPreview(res.html, false);
+    if (multi) {
+      state.files[index] = { name: state.files[index].name, content: res.html };
+      state.currentFile = state.files[index].name;
+      addChatMessage('assistant', 'Обновил страницу ' + state.files[index].name + '. Остальные страницы сайта не тронуты — ZIP соберёт все.');
+    } else {
+      state.files = [{ name: 'index.html', content: res.html }];
+      state.currentFile = 'index.html';
+    }
+    renderPreview(res.html, multi);
     renderPagesBar();
     if ($('statCost')) $('statCost').textContent = res.usage && (res.usage.cost_rub || res.usage.cost) ? fmtRub(res.usage.cost_rub || res.usage.cost) : $('statCost').textContent;
     addChatMessage('assistant', 'Готово, обновил. Что ещё поправить?');
@@ -570,13 +615,24 @@ function tryOwnerPin() {
     var i = document.querySelector('#ownerPinModal input'); if (i) { i.style.outline = '2px solid #e5484d'; setTimeout(function () { i.style.outline = ''; }, 1200); }
   }
 }
-async function refreshBalance() {
+async function refreshBalance(warn) {
   try {
     var b = await polzaBalance();
     state.balance = b.available;
     var el = $('balancePill');
-    if (el) { el.textContent = 'Баланс ' + fmtRub(b.available); el.classList.remove('hidden'); }
-  } catch (e) { }
+    if (el) {
+      el.textContent = 'Баланс ' + fmtRub(b.available);
+      el.classList.remove('hidden');
+      el.className = 'px-2.5 py-1 rounded-full text-[11px] font-mono ' +
+        (b.available < 10 ? 'bg-[#FF4D8D]/20 border border-[#FF4D8D]/40 text-[#FF4D8D]' : 'glass');
+    }
+    if (warn && b.available < 10) {
+      toast('На балансе Polza осталось ' + fmtRub(b.available) + ' — пополните счёт', '⚠️');
+      addChatMessage('assistant', 'Внимание: на балансе ключа Polza осталось ' + fmtRub(b.available) +
+        '. Пополните в панели polza.ai, иначе генерация остановится. Если это происходит без ваших запросов — проверьте, не утёк ли ключ: посмотрите историю генераций в панели Polza и перевыпустите ключ.');
+    }
+    return b.available;
+  } catch (e) { return null; }
 }
 async function checkKeyOnStart() {
   updateKeyUI();
@@ -692,6 +748,22 @@ async function runSelfTest(realMode) {
     add(list.length > 100, 'Каталог моделей', list.length + ' моделей');
   } catch (e) { add(false, 'Каталог моделей', e.message); }
 
+  // 5.1 безопасность ключа
+  try {
+    var inCode = typeof CONFIG !== 'undefined' && !!CONFIG.OWNER_KEY;
+    add(!inCode, 'Ключ не зашит в код страницы',
+      inCode ? 'ВНИМАНИЕ: ключ владельца прописан в CONFIG.OWNER_KEY — его видят все посетители, баланс может утекать' :
+        (isProxied() ? 'ключ живёт на сервере' : 'ключ только у вас в браузере'));
+  } catch (e) { add(true, 'Проверка безопасности ключа', ''); }
+
+  // 5.2 лимиты сервера
+  if (isProxied() && window.__serverInfo && window.__serverInfo.limits) {
+    var L = window.__serverInfo.limits;
+    add(true, 'Защита от перерасхода', L.daily_rub
+      ? 'дневной лимит ' + L.daily_rub + ' ₽, израсходовано сегодня ' + (L.spent_today || 0).toFixed(2) + ' ₽'
+      : 'серверные лимиты выключены (MAX_DAILY_RUB=0)');
+  }
+
   // 6. фото-поиск
   try {
     var photos = await Photos.search('business team office', 3);
@@ -756,9 +828,11 @@ document.addEventListener('DOMContentLoaded', function () {
   setTimeout(async function () {
     var info = await detectProxy();
     if (info) {
-      var pill = $('keyPill');
-      if (pill) { pill.textContent = '🛡 сервер (ключ скрыт)'; pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#00D9FF]/15 border-[#00D9FF]/40 text-[#00D9FF]'; }
-      toast('Работаю через сервер: ключ скрыт от посетителей', '🛡');
+      window.__serverInfo = info;
+      updateKeyUI();
+      var lim = info.limits || {};
+      var extra = lim.daily_rub ? ' Дневной лимит: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '';
+      toast('Работаю через сервер: ключ скрыт от посетителей.' + extra, '🛡');
     }
     checkKeyOnStart();
   }, 300);

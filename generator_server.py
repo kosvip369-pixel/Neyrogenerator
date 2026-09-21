@@ -49,6 +49,83 @@ app.add_middleware(
 
 TIMEOUT = httpx.Timeout(600.0, connect=30.0)
 
+# Лимиты трат (защита от утечки ключа и от случайных зацикленных генераций).
+MAX_DAILY_RUB = float(os.environ.get("MAX_DAILY_RUB", "100"))     # 0 = без лимита
+MIN_BALANCE_RUB = float(os.environ.get("MIN_BALANCE_RUB", "5"))   # ниже этого баланса генерация не запускается
+SPEND_FILE = os.environ.get("SPEND_FILE", os.path.join(ROOT, ".spend_log.json"))
+
+
+def _load_spend() -> Dict[str, Any]:
+    try:
+        with open(SPEND_FILE, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if data.get("date") != time.strftime("%Y-%m-%d"):
+            return {"date": time.strftime("%Y-%m-%d"), "spent": 0.0, "requests": 0}
+        return data
+    except Exception:
+        return {"date": time.strftime("%Y-%m-%d"), "spent": 0.0, "requests": 0}
+
+
+def _add_spend(rub: float) -> None:
+    data = _load_spend()
+    data["spent"] = round(float(data.get("spent", 0)) + float(rub or 0), 4)
+    data["requests"] = int(data.get("requests", 0)) + 1
+    try:
+        with open(SPEND_FILE, "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+    except Exception:
+        pass
+
+
+def _usage_cost(content: bytes) -> float:
+    try:
+        usage = (json.loads(content) or {}).get("usage") or {}
+        return float(usage.get("cost_rub") or usage.get("cost") or 0)
+    except Exception:
+        return 0.0
+
+
+def _cost_from_sse(raw: bytes) -> float:
+    """Достаёт cost_rub из последних SSE-чанков стрима."""
+    try:
+        text = raw.decode("utf-8", "replace")
+    except Exception:
+        return 0.0
+    best = 0.0
+    for m in re.finditer(r'"cost_rub"\s*:\s*([0-9.]+)', text):
+        try:
+            best = max(best, float(m.group(1)))
+        except Exception:
+            pass
+    return best
+
+
+async def guard_spend(request: Request) -> None:
+    """Не даём ключу утечь в ноль: лимит в сутки + минимальный остаток на балансе."""
+    if MAX_DAILY_RUB > 0:
+        data = _load_spend()
+        if float(data.get("spent", 0)) >= MAX_DAILY_RUB:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Достигнут дневной лимит трат ({MAX_DAILY_RUB:.0f} ₽). Изменить: переменная MAX_DAILY_RUB.",
+            )
+    if MIN_BALANCE_RUB > 0:
+        key = pick_key(request)
+        try:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(20.0)) as client:
+                r = await client.get(f"{POLZA_BASE}/balance", headers={"Authorization": f"Bearer {key}"})
+            if r.status_code == 200:
+                available = float((r.json() or {}).get("available") or 0)
+                if available < MIN_BALANCE_RUB:
+                    raise HTTPException(
+                        status_code=402,
+                        detail=f"На балансе {available:.2f} ₽ — меньше минимума {MIN_BALANCE_RUB:.0f} ₽. Пополните счёт.",
+                    )
+        except HTTPException:
+            raise
+        except Exception:
+            pass  # не смогли проверить баланс — не блокируем работу
+
 
 def pick_key(request: Request) -> str:
     """Ключ сервера либо ключ посетителя (если разрешено)."""
@@ -88,6 +165,7 @@ async def health():
             "openverse": True,
         },
         "models": {"text": DEFAULT_TEXT_MODEL, "refine": DEFAULT_REFINE_MODEL, "image": DEFAULT_IMAGE_MODEL},
+        "limits": {"daily_rub": MAX_DAILY_RUB, "min_balance_rub": MIN_BALANCE_RUB, "spent_today": _load_spend().get("spent", 0)},
     }
 
 
@@ -104,6 +182,7 @@ async def index():
 # --------------------------------------------------------------------------- #
 @app.post("/api/proxy/chat/completions")
 async def proxy_chat(request: Request):
+    await guard_spend(request)
     body = await request.json()
     body.setdefault("model", DEFAULT_TEXT_MODEL)
     body.setdefault("max_tokens", 32000)
@@ -112,6 +191,7 @@ async def proxy_chat(request: Request):
 
     if stream:
         async def gen():
+            tail = b""
             async with httpx.AsyncClient(timeout=TIMEOUT) as client:
                 async with client.stream("POST", f"{POLZA_BASE}/chat/completions", json=body, headers=headers) as resp:
                     if resp.status_code >= 400:
@@ -119,18 +199,24 @@ async def proxy_chat(request: Request):
                         yield f"data: {json.dumps({'error': {'message': detail[:400]}}, ensure_ascii=False)}\n\n"
                         return
                     async for chunk in resp.aiter_bytes():
+                        tail = (tail + chunk)[-4000:]
                         yield chunk
+            cost = _cost_from_sse(tail)
+            if cost:
+                _add_spend(cost)
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     async with httpx.AsyncClient(timeout=TIMEOUT) as client:
         resp = await client.post(f"{POLZA_BASE}/chat/completions", json=body, headers=headers)
     if resp.status_code >= 400:
         raise polza_error(resp)
+    _add_spend(_usage_cost(resp.content))
     return Response(content=resp.content, media_type="application/json")
 
 
 @app.post("/api/proxy/images/generations")
 async def proxy_images(request: Request):
+    await guard_spend(request)
     body = await request.json()
     body.setdefault("model", DEFAULT_IMAGE_MODEL)
     body.setdefault("n", 1)
@@ -145,6 +231,7 @@ async def proxy_images(request: Request):
 
 @app.post("/api/proxy/media")
 async def proxy_media_create(request: Request):
+    await guard_spend(request)
     body = await request.json()
     body.setdefault("model", DEFAULT_IMAGE_MODEL)
     headers = {"Authorization": f"Bearer {pick_key(request)}", "Content-Type": "application/json"}
@@ -162,6 +249,15 @@ async def proxy_media_status(media_id: str, request: Request):
         resp = await client.get(f"{POLZA_BASE}/media/{media_id}", headers=headers)
     if resp.status_code >= 400:
         raise polza_error(resp)
+    # завершённая генерация картинки = потраченные деньги: учитываем их в лимите
+    try:
+        data = json.loads(resp.content)
+        if data.get("status") == "completed":
+            cost = (data.get("usage") or {}).get("cost_rub") or 0
+            if cost and not data.get("__counted"):
+                _add_spend(cost)
+    except Exception:
+        pass
     return Response(content=resp.content, media_type="application/json")
 
 
@@ -324,6 +420,7 @@ async def photos(q: str, count: int = 8):
 # --------------------------------------------------------------------------- #
 @app.post("/api/generate")
 async def generate(payload: Dict[str, Any], request: Request):
+    await guard_spend(request)
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Пустой prompt")
@@ -343,11 +440,13 @@ async def generate(payload: Dict[str, Any], request: Request):
     data = resp.json()
     choice = (data.get("choices") or [{}])[0]
     html = (choice.get("message") or {}).get("content", "")
+    _add_spend(((data.get("usage") or {}).get("cost_rub") or 0))
     return {"html": html, "model": body["model"], "finish_reason": choice.get("finish_reason"), "usage": data.get("usage")}
 
 
 @app.post("/api/refine")
 async def refine(payload: Dict[str, Any], request: Request):
+    await guard_spend(request)
     current_html = payload.get("current_html") or ""
     message = payload.get("message") or ""
     if not current_html or not message:
@@ -367,11 +466,13 @@ async def refine(payload: Dict[str, Any], request: Request):
     if resp.status_code >= 400:
         raise polza_error(resp)
     data = resp.json()
+    _add_spend(((data.get("usage") or {}).get("cost_rub") or 0))
     return {"html": (data.get("choices") or [{}])[0].get("message", {}).get("content", ""), "model": body["model"]}
 
 
 @app.post("/api/generate-image")
 async def generate_image(payload: Dict[str, Any], request: Request):
+    await guard_spend(request)
     prompt = (payload.get("prompt") or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="Пустой prompt")
@@ -401,7 +502,9 @@ async def generate_image(payload: Dict[str, Any], request: Request):
             if sj.get("status") == "completed":
                 url = ((sj.get("data") or [{}])[0] or {}).get("url")
                 if url:
-                    return {"url": url, "model": model, "cost_rub": (sj.get("usage") or {}).get("cost_rub")}
+                    cost = (sj.get("usage") or {}).get("cost_rub") or 0
+                    _add_spend(cost)
+                    return {"url": url, "model": model, "cost_rub": cost}
                 break
             if sj.get("status") in ("failed", "cancelled"):
                 raise HTTPException(status_code=502, detail=f"Генерация не удалась: {str(sj.get('error'))[:200]}")
