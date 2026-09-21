@@ -276,6 +276,93 @@ def main():
 <!-- Toast -->''',
         "модалки тарифов/PIN/диагностики")
 
+
+    # 3.8 Инструкция в окне ключа — под текущий интерфейс (была от старой версии)
+    markup = patch(markup,
+        '''            1. В шапке сайта найди поле <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 Polza API ключ (sk-polza-...)</code> — оно вверху справа<br>
+            2. Вставь туда ключ с Polza AI<br>
+            3. Нажми OK — ключ сохранится в браузере (localStorage) и подсветится зеленым ●<br>
+            4. Теперь можешь генерировать сайты!''',
+        '''            1. Нажми на кнопку <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 ключ не задан</code> в шапке справа — откроется это окно<br>
+            2. Вставь ключ Polza в поле ниже. Ключ начинается на <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">pza_</code> (старые — на <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">sk-</code>)<br>
+            3. Нажми «💾 Сохранить ключ» — ключ ляжет только в твой браузер и никуда, кроме polza.ai, не уходит<br>
+            4. Кнопка в шапке станет зелёной <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 мой ключ</code> — можно генерировать''',
+        "инструкция варианта 1 (в браузере)")
+
+    # 3.81 Мёртвая картинка-схема (via.placeholder.com больше не работает) — убираем
+    markup = patch(markup,
+        '''          <div class="mt-3 flex gap-2">
+            <img src="https://via.placeholder.com/600x80/151A2D/8B7DFF?text=HEADER+:+[●]+[____Polza+API+key____]+[👁]+[OK]+[Model]+[Получить+ключ]+[Мозги]" class="w-full rounded-lg border border-white/10 opacity-60">
+          </div>''',
+        '''          <div class="mt-3 p-3 rounded-lg bg-black/30 border border-white/5 text-[12px] text-white/50">
+            Так ключ выглядит в шапке: <span class="px-2 py-0.5 rounded-full bg-[#FFE17B]/15 border border-[#FFE17B]/40 text-[#FFE17B] font-mono text-[11px]">🔑 ключ не задан</span>
+            <span class="mx-1">→</span> после сохранения: <span class="px-2 py-0.5 rounded-full bg-[#00D492]/15 border border-[#00D492]/40 text-[#00D492] font-mono text-[11px]">🔑 мой ключ</span>
+          </div>''',
+        "схема-подсказка про индикатор ключа")
+
+    # 3.82 Верные имена переменных в серверной инструкции + ключи фотостоков
+    markup = patch(markup,
+        '''              # Создай файл .env в корне проекта<br>
+              cp .env.example .env<br>
+              # Открой .env и вставь:<br>
+              POLZA_API_KEY=sk-polza-твой-ключ-сюда<br>
+              POLZA_BASE_URL=https://polza.ai/api/v1<br><br>
+              # Или через переменную окружения:<br>
+              export POLZA_API_KEY=sk-polza-...<br>
+              python generator_server.py''',
+        '''              # Создай файл .env рядом с generator_server.py<br>
+              cp .env.example .env<br>
+              # Открой .env и вставь свой ключ:<br>
+              POLZA_API_KEY=pza_твой-ключ-сюда<br>
+              # необязательно — ключи фотостоков (фото точнее):<br>
+              UNSPLASH_ACCESS_KEY=<br>
+              PEXELS_API_KEY=<br>
+              PIXABAY_API_KEY=<br><br>
+              # Или разовой переменной без файла:<br>
+              export POLZA_API_KEY=pza_...<br>
+              python generator_server.py''',
+        "инструкция варианта 2 (на сервере)")
+
+    markup = patch(markup,
+        '''            Тогда ключ в браузере указывать не нужно — бекенд сам проксирует запросы.''',
+        '''            Тогда ключ в браузере указывать не нужно: запросы идут через сервер, а в шапке появится
+            <span class="px-2 py-0.5 rounded-full bg-[#00D9FF]/15 border border-[#00D9FF]/40 text-[#00D9FF] font-mono text-[11px]">🛡 сервер</span>.
+            Файл <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">.env</code> уже прописан в <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">.gitignore</code> — в GitHub он не попадёт.''',
+        "пояснение про серверный режим")
+
+    # 3.83 Шаги «где взять ключ»: верная ссылка и формат ключа
+    markup = patch(markup,
+        '''            <div>3. Dashboard → <b>API Keys</b> → Create Key → скопируй <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">sk-polza-...</code></div>
+            <div>4. Вставь в генератор!</div>''',
+        '''            <div>3. Открой <a href="https://polza.ai/dashboard/api-keys" target="_blank" class="text-[#8B7DFF] underline">polza.ai/dashboard/api-keys</a> → <b>Create Key</b> → скопируй ключ (начинается на <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">pza_</code>)</div>
+            <div>4. Вставь его в поле ниже и нажми «💾 Сохранить ключ»</div>''',
+        "шаги получения ключа")
+
+    markup = patch(markup,
+        '''          <a href="https://polza.ai/register" target="_blank" class="mt-3 inline-flex btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white">Получить ключ на polza.ai →</a>''',
+        '''          <a href="https://polza.ai/dashboard/api-keys" target="_blank" class="mt-3 inline-flex btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white">Получить ключ на polza.ai →</a>''',
+        "кнопка получения ключа")
+
+    # 3.84 Блок «Безопасность» — по фактам, плюс подсказка про кнопку «Забыть ключ»
+    markup = patch(markup,
+        '''            • В браузере ключ хранится только у тебя в localStorage, никуда не отправляется кроме api.polza.ai<br>
+            • Для продакшена используй бекенд (generator_server.py) — он скрывает ключ<br>
+            • Можешь в любой момент удалить: очисти localStorage или нажми "Очистить" в генераторе''',
+        '''            • Ключ в браузере лежит только у тебя (localStorage этого браузера) и уходит напрямую на polza.ai — больше никуда<br>
+            • Никогда не вставляй ключ в код страницы и не выкладывай его в GitHub: выложенный ключ увидят все<br>
+            • Для публикации в интернете запускай generator_server.py — ключ живёт в файле .env на сервере, посетители его не видят<br>
+            • Кнопка «🗑 Забыть ключ» ниже стирает ключ из этого браузера''',
+        "блок безопасности")
+
+    # 3.85 Кнопка «Забыть ключ» и подсказка в поле ввода
+    markup = patch(markup,
+        '''          <input id="keyModalInput" type="text" placeholder="Вставь сюда pza_..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
+          <button onclick="saveKeyFromModal()" class="btn-primary px-6 py-3 rounded-xl text-[14px] font-bold text-white">💾 Сохранить ключ</button>''',
+        '''          <input id="keyModalInput" type="text" placeholder="Вставь сюда ключ pza_..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
+          <button onclick="saveKeyFromModal()" class="btn-primary px-6 py-3 rounded-xl text-[14px] font-bold text-white">💾 Сохранить ключ</button>
+          <button onclick="forgetKey()" class="btn-ghost px-4 py-3 rounded-xl text-[13px]" title="Стереть ключ из этого браузера">🗑 Забыть ключ</button>''',
+        "поле ввода ключа + кнопка «Забыть ключ»")
+
     # ==================== СБОРКА ====================
 
     import json

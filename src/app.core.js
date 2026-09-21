@@ -110,11 +110,9 @@ function updateKeyUI() {
 
   // работа через сервер: ключ вообще не покидает сервер
   if (typeof isProxied === 'function' && isProxied()) {
-    var lim = (window.__serverInfo && window.__serverInfo.limits) || {};
     pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#00D9FF]/15 border-[#00D9FF]/40 text-[#00D9FF]';
-    pill.textContent = '🛡 сервер' + (lim.daily_rub ? ' · лимит ' + lim.daily_rub + ' ₽/день' : '');
-    pill.title = 'Запросы идут через серверную часть: ключ Polza не виден посетителям.' +
-      (lim.daily_rub ? ' Израсходовано сегодня: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '');
+    pill.textContent = '🛡 сервер';
+    pill.title = 'Запросы идут через серверную часть: ключ Polza не виден посетителям. Ограничений по тратам нет.';
     return;
   }
 

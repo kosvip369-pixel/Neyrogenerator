@@ -592,6 +592,14 @@ function photoKeysState() {
   have.forEach(function (pr) { var i = $(pr[0]); if (i && !i.value) i.value = lsGet(pr[1], ''); });
 }
 /* Открыть окно ввода ключа (по клику на индикатор в шапке). */
+/* Стереть ключ из этого браузера. */
+function forgetKey() {
+  try { localStorage.removeItem(CONFIG.LS_KEY); } catch (e) {}
+  ['polzaKey', 'polzaKeyMobile', 'keyModalInput'].forEach(function (id) { if ($(id)) $(id).value = ''; });
+  updateKeyUI();
+  var m = $('keyModal'); if (m) m.classList.add('hidden');
+  toast('Ключ удалён из этого браузера', '🗑');
+}
 function openKeyModal() {
   var m = $('keyModal');
   if (!m) return;
@@ -765,12 +773,9 @@ async function runSelfTest(realMode) {
         (isProxied() ? 'ключ живёт на сервере' : 'ключ только у вас в браузере'));
   } catch (e) { add(true, 'Проверка безопасности ключа', ''); }
 
-  // 5.2 лимиты сервера
-  if (isProxied() && window.__serverInfo && window.__serverInfo.limits) {
-    var L = window.__serverInfo.limits;
-    add(true, 'Защита от перерасхода', L.daily_rub
-      ? 'дневной лимит ' + L.daily_rub + ' ₽, израсходовано сегодня ' + (L.spent_today || 0).toFixed(2) + ' ₽'
-      : 'серверные лимиты выключены (MAX_DAILY_RUB=0)');
+  // 5.2 серверная часть
+  if (isProxied()) {
+    add(true, 'Серверная часть работает', 'запросы идут через сервер, ключ посетителям не виден, лимитов нет');
   }
 
   // 6. фото-поиск
@@ -840,7 +845,7 @@ document.addEventListener('DOMContentLoaded', function () {
       window.__serverInfo = info;
       updateKeyUI();
       var lim = info.limits || {};
-      var extra = lim.daily_rub ? ' Дневной лимит: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '';
+      var extra = '';
       toast('Работаю через сервер: ключ скрыт от посетителей.' + extra, '🛡');
     }
     checkKeyOnStart();

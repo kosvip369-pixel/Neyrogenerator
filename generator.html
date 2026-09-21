@@ -491,13 +491,14 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
         <div class="rounded-xl bg-[#6C5CFF]/10 border border-[#6C5CFF]/20 p-4">
           <div class="font-bold text-[14px] mb-2">📍 Вариант 1: В браузере (для GitHub Pages) — самый простой</div>
           <div class="text-[13px] text-white/70 leading-relaxed">
-            1. В шапке сайта найди поле <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 Polza API ключ (sk-polza-...)</code> — оно вверху справа<br>
-            2. Вставь туда ключ с Polza AI<br>
-            3. Нажми OK — ключ сохранится в браузере (localStorage) и подсветится зеленым ●<br>
-            4. Теперь можешь генерировать сайты!
+            1. Нажми на кнопку <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 ключ не задан</code> в шапке справа — откроется это окно<br>
+            2. Вставь ключ Polza в поле ниже. Ключ начинается на <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">pza_</code> (старые — на <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">sk-</code>)<br>
+            3. Нажми «💾 Сохранить ключ» — ключ ляжет только в твой браузер и никуда, кроме polza.ai, не уходит<br>
+            4. Кнопка в шапке станет зелёной <code class="px-2 py-0.5 rounded bg-white/10 font-mono text-[12px]">🔑 мой ключ</code> — можно генерировать
           </div>
-          <div class="mt-3 flex gap-2">
-            <img src="https://via.placeholder.com/600x80/151A2D/8B7DFF?text=HEADER+:+[●]+[____Polza+API+key____]+[👁]+[OK]+[Model]+[Получить+ключ]+[Мозги]" class="w-full rounded-lg border border-white/10 opacity-60">
+          <div class="mt-3 p-3 rounded-lg bg-black/30 border border-white/5 text-[12px] text-white/50">
+            Так ключ выглядит в шапке: <span class="px-2 py-0.5 rounded-full bg-[#FFE17B]/15 border border-[#FFE17B]/40 text-[#FFE17B] font-mono text-[11px]">🔑 ключ не задан</span>
+            <span class="mx-1">→</span> после сохранения: <span class="px-2 py-0.5 rounded-full bg-[#00D492]/15 border border-[#00D492]/40 text-[#00D492] font-mono text-[11px]">🔑 мой ключ</span>
           </div>
         </div>
 
@@ -506,16 +507,21 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div class="text-[13px] text-white/70 leading-relaxed">
             Если запускаешь <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">python generator_server.py</code>:
             <div class="mt-2 p-3 rounded-lg bg-black/40 border border-white/5 font-mono text-[12px] leading-relaxed">
-              # Создай файл .env в корне проекта<br>
+              # Создай файл .env рядом с generator_server.py<br>
               cp .env.example .env<br>
-              # Открой .env и вставь:<br>
-              POLZA_API_KEY=sk-polza-твой-ключ-сюда<br>
-              POLZA_BASE_URL=https://polza.ai/api/v1<br><br>
-              # Или через переменную окружения:<br>
-              export POLZA_API_KEY=sk-polza-...<br>
+              # Открой .env и вставь свой ключ:<br>
+              POLZA_API_KEY=pza_твой-ключ-сюда<br>
+              # необязательно — ключи фотостоков (фото точнее):<br>
+              UNSPLASH_ACCESS_KEY=<br>
+              PEXELS_API_KEY=<br>
+              PIXABAY_API_KEY=<br><br>
+              # Или разовой переменной без файла:<br>
+              export POLZA_API_KEY=pza_...<br>
               python generator_server.py
             </div>
-            Тогда ключ в браузере указывать не нужно — бекенд сам проксирует запросы.
+            Тогда ключ в браузере указывать не нужно: запросы идут через сервер, а в шапке появится
+            <span class="px-2 py-0.5 rounded-full bg-[#00D9FF]/15 border border-[#00D9FF]/40 text-[#00D9FF] font-mono text-[11px]">🛡 сервер</span>.
+            Файл <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">.env</code> уже прописан в <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">.gitignore</code> — в GitHub он не попадёт.
           </div>
         </div>
 
@@ -524,24 +530,26 @@ body{background:var(--bg);color:#E6E8F0;font-family:'Manrope',sans-serif;overflo
           <div class="text-[13px] text-white/70 leading-relaxed space-y-2">
             <div>1. Иди на <a href="https://polza.ai/register" target="_blank" class="text-[#8B7DFF] underline">https://polza.ai/register</a> — регистрация за 30 сек</div>
             <div>2. Пополни баланс на 100-300₽ (хватит на 20-30 сайтов) — оплата российской картой, без VPN</div>
-            <div>3. Dashboard → <b>API Keys</b> → Create Key → скопируй <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">sk-polza-...</code></div>
-            <div>4. Вставь в генератор!</div>
+            <div>3. Открой <a href="https://polza.ai/dashboard/api-keys" target="_blank" class="text-[#8B7DFF] underline">polza.ai/dashboard/api-keys</a> → <b>Create Key</b> → скопируй ключ (начинается на <code class="px-1.5 py-0.5 rounded bg-white/10 font-mono text-[11px]">pza_</code>)</div>
+            <div>4. Вставь его в поле ниже и нажми «💾 Сохранить ключ»</div>
           </div>
-          <a href="https://polza.ai/register" target="_blank" class="mt-3 inline-flex btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white">Получить ключ на polza.ai →</a>
+          <a href="https://polza.ai/dashboard/api-keys" target="_blank" class="mt-3 inline-flex btn-primary px-5 py-2.5 rounded-xl text-[13px] font-bold text-white">Получить ключ на polza.ai →</a>
         </div>
 
         <div class="rounded-xl bg-white/5 border border-white/10 p-4">
           <div class="font-bold text-[13px] mb-2">🔒 Безопасность</div>
           <div class="text-[12px] text-white/50 leading-relaxed">
-            • В браузере ключ хранится только у тебя в localStorage, никуда не отправляется кроме api.polza.ai<br>
-            • Для продакшена используй бекенд (generator_server.py) — он скрывает ключ<br>
-            • Можешь в любой момент удалить: очисти localStorage или нажми "Очистить" в генераторе
+            • Ключ в браузере лежит только у тебя (localStorage этого браузера) и уходит напрямую на polza.ai — больше никуда<br>
+            • Никогда не вставляй ключ в код страницы и не выкладывай его в GitHub: выложенный ключ увидят все<br>
+            • Для публикации в интернете запускай generator_server.py — ключ живёт в файле .env на сервере, посетители его не видят<br>
+            • Кнопка «🗑 Забыть ключ» ниже стирает ключ из этого браузера
           </div>
         </div>
 
         <div class="flex gap-3">
-          <input id="keyModalInput" type="text" placeholder="Вставь сюда pza_..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
+          <input id="keyModalInput" type="text" placeholder="Вставь сюда ключ pza_..." class="input-field flex-1 px-4 py-3 rounded-xl text-[14px] font-mono" onkeydown="if(event.key==='Enter') saveKeyFromModal()">
           <button onclick="saveKeyFromModal()" class="btn-primary px-6 py-3 rounded-xl text-[14px] font-bold text-white">💾 Сохранить ключ</button>
+          <button onclick="forgetKey()" class="btn-ghost px-4 py-3 rounded-xl text-[13px]" title="Стереть ключ из этого браузера">🗑 Забыть ключ</button>
         </div>
 
         <div class="mt-4 pt-4 border-t border-white/10">
@@ -830,11 +838,9 @@ function updateKeyUI() {
 
   // работа через сервер: ключ вообще не покидает сервер
   if (typeof isProxied === 'function' && isProxied()) {
-    var lim = (window.__serverInfo && window.__serverInfo.limits) || {};
     pill.className = 'px-2.5 py-1 rounded-full text-[11px] font-bold border bg-[#00D9FF]/15 border-[#00D9FF]/40 text-[#00D9FF]';
-    pill.textContent = '🛡 сервер' + (lim.daily_rub ? ' · лимит ' + lim.daily_rub + ' ₽/день' : '');
-    pill.title = 'Запросы идут через серверную часть: ключ Polza не виден посетителям.' +
-      (lim.daily_rub ? ' Израсходовано сегодня: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '');
+    pill.textContent = '🛡 сервер';
+    pill.title = 'Запросы идут через серверную часть: ключ Polza не виден посетителям. Ограничений по тратам нет.';
     return;
   }
 
@@ -2314,6 +2320,14 @@ function photoKeysState() {
   have.forEach(function (pr) { var i = $(pr[0]); if (i && !i.value) i.value = lsGet(pr[1], ''); });
 }
 /* Открыть окно ввода ключа (по клику на индикатор в шапке). */
+/* Стереть ключ из этого браузера. */
+function forgetKey() {
+  try { localStorage.removeItem(CONFIG.LS_KEY); } catch (e) {}
+  ['polzaKey', 'polzaKeyMobile', 'keyModalInput'].forEach(function (id) { if ($(id)) $(id).value = ''; });
+  updateKeyUI();
+  var m = $('keyModal'); if (m) m.classList.add('hidden');
+  toast('Ключ удалён из этого браузера', '🗑');
+}
 function openKeyModal() {
   var m = $('keyModal');
   if (!m) return;
@@ -2487,12 +2501,9 @@ async function runSelfTest(realMode) {
         (isProxied() ? 'ключ живёт на сервере' : 'ключ только у вас в браузере'));
   } catch (e) { add(true, 'Проверка безопасности ключа', ''); }
 
-  // 5.2 лимиты сервера
-  if (isProxied() && window.__serverInfo && window.__serverInfo.limits) {
-    var L = window.__serverInfo.limits;
-    add(true, 'Защита от перерасхода', L.daily_rub
-      ? 'дневной лимит ' + L.daily_rub + ' ₽, израсходовано сегодня ' + (L.spent_today || 0).toFixed(2) + ' ₽'
-      : 'серверные лимиты выключены (MAX_DAILY_RUB=0)');
+  // 5.2 серверная часть
+  if (isProxied()) {
+    add(true, 'Серверная часть работает', 'запросы идут через сервер, ключ посетителям не виден, лимитов нет');
   }
 
   // 6. фото-поиск
@@ -2562,7 +2573,7 @@ document.addEventListener('DOMContentLoaded', function () {
       window.__serverInfo = info;
       updateKeyUI();
       var lim = info.limits || {};
-      var extra = lim.daily_rub ? ' Дневной лимит: ' + (lim.spent_today || 0).toFixed(2) + ' ₽ из ' + lim.daily_rub + ' ₽.' : '';
+      var extra = '';
       toast('Работаю через сервер: ключ скрыт от посетителей.' + extra, '🛡');
     }
     checkKeyOnStart();

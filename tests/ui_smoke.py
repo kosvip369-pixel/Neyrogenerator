@@ -28,6 +28,7 @@ FUNCTIONS = [
     "sendChat", "quickChat", "searchImages", "generateImage", "insertImage", "randomize",
     "clearAll", "loadExample", "setDevice", "toggleCode", "openPricingModal", "tryOwnerPin",
     "runSelfTest", "renderModels", "selectModel", "saveKeyFromModal", "savePhotoKeys",
+    "openKeyModal", "forgetKey",
     "switchImgTool", "handleUserPhotoSelected", "applyAiPhotoshop", "startVoiceInput",
     "showPreviewFile", "restoreHistory", "setPrompt", "setColors",
 ]
@@ -70,10 +71,38 @@ def main():
             print(("   ✅ " if c["ok"] else "   ❌ ") + c["l"] + (f" — {c['d']}" if c["d"] else ""))
         problems += [c["l"] for c in report if not c["ok"]]
 
+        # Окно ключа: инструкция должна описывать текущий интерфейс (кнопку в шапке),
+        # а ключ — сохраняться и стираться кнопкой «Забыть ключ».
+        page.evaluate("document.getElementById('keyModal').classList.add('hidden')")
+        page.click("#keyPill")
+        page.wait_for_timeout(500)
+        txt = page.inner_text("#keyModal")
+        if "sk-polza" in txt or "Найди поле" in txt:
+            problems.append("инструкция в окне ключа описывает старый интерфейс")
+            print("4. Инструкция в окне ключа: устарела ❌")
+        else:
+            print("4. Инструкция в окне ключа: актуальна ✅")
+        page.fill("#keyModalInput", "pza_SMOKE_TEST")
+        page.click("button:has-text('💾 Сохранить ключ')")
+        page.wait_for_timeout(700)
+        saved = page.evaluate("localStorage.getItem('ns_polza_key_v2')")
+        print("5. Ключ сохраняется:", "да ✅" if saved else "НЕТ ❌")
+        if not saved:
+            problems.append("ключ не сохраняется из окна")
+        page.click("#keyPill")
+        page.wait_for_timeout(400)
+        page.click("button:has-text('🗑 Забыть ключ')")
+        page.wait_for_timeout(700)
+        if page.evaluate("localStorage.getItem('ns_polza_key_v2')"):
+            problems.append("«Забыть ключ» не стирает ключ")
+            print("6. «Забыть ключ»: НЕ работает ❌")
+        else:
+            print("6. «Забыть ключ»: стирает ключ ✅")
+
         if args.generate:
             if args.key:
                 page.fill("#keyModalInput", args.key)
-                page.click("text=💾 Сохранить ключ")
+                page.click("button:has-text('💾 Сохранить ключ')")
                 page.wait_for_timeout(800)
             page.fill("#siteName", "Smoke Test")
             page.select_option("#businessType", "IT / SaaS / Стартап")
